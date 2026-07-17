@@ -8,6 +8,11 @@ import {
   type ModelRequestOptions,
 } from "./model-options";
 import { OpenAIOAuth } from "./oauth";
+import {
+  CHATGPT_CODEX_RESPONSES_URL,
+  CHATGPT_CODEX_USAGE_URL,
+  OAUTH_ORIGINATOR,
+} from "./protocol";
 import { ResponsesStreamParser, type CodexStreamEvent } from "./sse";
 import {
   mergeQuotaPayload,
@@ -16,8 +21,6 @@ import {
   type CodexUsageSnapshot,
 } from "./usage";
 
-const RESPONSES_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
-const USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
 const DEFAULT_INSTRUCTIONS = "You are OpenAI Codex, a coding agent in Visual Studio Code. Be concise, correct, and use the supplied tools when useful.";
 const MODELS: ReadonlyArray<{ id: string; input: number; output: number; image?: boolean }> = [
   { id: "gpt-5.6-sol", input: 372_000, output: 128_000, image: true },
@@ -171,7 +174,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   private async sendUsageRequest(credentials: { token: string; accountId?: string }): Promise<Response> {
-    return fetch(USAGE_ENDPOINT, {
+    return fetch(CHATGPT_CODEX_USAGE_URL, {
       headers: {
         Authorization: `Bearer ${credentials.token}`,
         Accept: "application/json",
@@ -205,14 +208,14 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     const listener = cancellation.onCancellationRequested(() => controller.abort());
     const sessionId = randomUUID();
     try {
-      return await fetch(RESPONSES_ENDPOINT, {
+      return await fetch(CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${credentials.token}`,
           "Content-Type": "application/json",
           Accept: "text/event-stream",
           "User-Agent": this.userAgent,
-          Originator: "codex_cli_rs",
+          Originator: OAUTH_ORIGINATOR,
           Session_id: sessionId,
           Conversation_id: sessionId,
           ...(credentials.accountId ? { "Chatgpt-Account-Id": credentials.accountId } : {}),

@@ -145,7 +145,7 @@ export function formatUsageStatusBar(snapshot: CodexUsageSnapshot): string {
 }
 
 export function formatUsageTooltip(snapshot: CodexUsageSnapshot, now = Date.now()): string {
-  const lines = [`OpenAI Codex usage${snapshot.planType ? ` (${snapshot.planType})` : ""}`];
+  const lines = [`Codex Bridge usage${snapshot.planType ? ` (${snapshot.planType})` : ""}`];
   if (snapshot.primary) lines.push(windowSummary(snapshot.primary, now));
   if (snapshot.secondary) lines.push(windowSummary(snapshot.secondary, now));
   if (snapshot.lastRequest) lines.push(`Last request: ${requestSummary(snapshot.lastRequest)}`);

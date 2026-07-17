@@ -5,11 +5,15 @@ import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import type * as vscode from "vscode";
 import { responseError } from "./errors";
+import {
+  EXTENSION_DISPLAY_NAME,
+  OAUTH_ORIGINATOR,
+  OPENAI_AUTHORIZE_URL,
+  OPENAI_OAUTH_CLIENT_ID,
+  OPENAI_REDIRECT_URI,
+  OPENAI_TOKEN_URL,
+} from "./protocol";
 
-export const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
-export const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
-export const TOKEN_URL = "https://auth.openai.com/oauth/token";
-export const REDIRECT_URI = "http://localhost:1455/auth/callback";
 const CALLBACK_PORT = 1455;
 const CALLBACK_PATH = "/auth/callback";
 const SCOPE = "openid email profile offline_access";
@@ -63,10 +67,10 @@ export class OpenAIOAuth {
     const verifier = randomBytes(96).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
     const state = randomBytes(32).toString("base64url");
-    const url = new URL(AUTHORIZE_URL);
+    const url = new URL(OPENAI_AUTHORIZE_URL);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("client_id", CLIENT_ID);
-    url.searchParams.set("redirect_uri", REDIRECT_URI);
+    url.searchParams.set("client_id", OPENAI_OAUTH_CLIENT_ID);
+    url.searchParams.set("redirect_uri", OPENAI_REDIRECT_URI);
     url.searchParams.set("scope", SCOPE);
     url.searchParams.set("code_challenge", challenge);
     url.searchParams.set("code_challenge_method", "S256");
@@ -74,7 +78,7 @@ export class OpenAIOAuth {
     url.searchParams.set("prompt", "login");
     url.searchParams.set("id_token_add_organizations", "true");
     url.searchParams.set("codex_cli_simplified_flow", "true");
-    url.searchParams.set("originator", "codex_cli_rs");
+    url.searchParams.set("originator", OAUTH_ORIGINATOR);
     return { url: url.toString(), state, verifier };
   }
 
@@ -93,7 +97,7 @@ export class OpenAIOAuth {
     const completion = new Promise<OAuthSession>((resolve, reject) => {
       rejectCompletion = reject;
       server = createServer(async (request, response) => {
-        const callback = new URL(request.url ?? "/", REDIRECT_URI);
+        const callback = new URL(request.url ?? "/", OPENAI_REDIRECT_URI);
         if (callback.pathname !== CALLBACK_PATH) {
           response.writeHead(404).end("Not found");
           return;
@@ -106,14 +110,14 @@ export class OpenAIOAuth {
           const session = await this.completeAuthorization(callback.toString(), flow);
           settled = true;
           response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          response.end(callbackPage("Signed in to OpenAI Codex", "You can close this tab and return to Visual Studio Code."));
+          response.end(callbackPage(`Signed in to ${EXTENSION_DISPLAY_NAME}`, "You can close this tab and return to Visual Studio Code."));
           close();
           resolve(session);
         } catch (error) {
           settled = true;
           const message = error instanceof Error ? error.message : String(error);
           response.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-          response.end(callbackPage("OpenAI sign-in failed", message));
+          response.end(callbackPage("ChatGPT sign-in failed", message));
           close();
           reject(error);
         }
@@ -121,7 +125,7 @@ export class OpenAIOAuth {
       server.once("error", (error) => {
         settled = true;
         close();
-        reject(new Error(`Unable to listen on ${REDIRECT_URI}: ${error.message}. Use “OpenAI Codex: Sign In Manually” instead.`));
+        reject(new Error(`Unable to listen on ${OPENAI_REDIRECT_URI}: ${error.message}. Use “Codex Bridge: Sign In Manually” instead.`));
       });
       server.listen(CALLBACK_PORT, "127.0.0.1");
       timeout = setTimeout(() => {
@@ -147,15 +151,15 @@ export class OpenAIOAuth {
     const callback = parseCallback(callbackInput);
     if (callback.error) throw new Error(callback.errorDescription ?? callback.error);
     if (!callback.code) throw new Error("The callback does not contain an authorization code");
-    if (callback.state && callback.state !== flow.state) throw new Error("Invalid OpenAI OAuth callback state");
-    const response = await this.fetcher(TOKEN_URL, {
+    if (callback.state !== flow.state) throw new Error("Invalid OpenAI OAuth callback state");
+    const response = await this.fetcher(OPENAI_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({
         grant_type: "authorization_code",
-        client_id: CLIENT_ID,
+        client_id: OPENAI_OAUTH_CLIENT_ID,
         code: callback.code,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: OPENAI_REDIRECT_URI,
         code_verifier: flow.verifier,
       }),
     });
@@ -195,14 +199,13 @@ export class OpenAIOAuth {
   private async refresh(session: OAuthSession): Promise<OAuthSession> {
     if (!this.refreshPromise) {
       this.refreshPromise = (async () => {
-        const response = await this.fetcher(TOKEN_URL, {
+        const response = await this.fetcher(OPENAI_TOKEN_URL, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
           body: new URLSearchParams({
             grant_type: "refresh_token",
-            client_id: CLIENT_ID,
+            client_id: OPENAI_OAUTH_CLIENT_ID,
             refresh_token: session.refreshToken,
-            scope: "openid profile email",
           }),
         });
         if (!response.ok) throw await responseError("OpenAI token refresh failed", response);

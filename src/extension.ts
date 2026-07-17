@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { messageOf } from "./errors";
 import { OpenAIOAuth, type AuthorizationFlow } from "./oauth";
 import { OpenAICodexProvider } from "./provider";
+import { EXTENSION_DISPLAY_NAME, extensionUserAgent } from "./protocol";
 import {
   formatUsageRows,
   formatUsageStatusBar,
@@ -13,17 +14,17 @@ import {
 const USAGE_STATE_KEY = "openaiCodex.usageSnapshot.v1";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const output = vscode.window.createOutputChannel("OpenAI Codex");
+  const output = vscode.window.createOutputChannel("Codex Bridge");
   const oauth = new OpenAIOAuth(context.secrets);
   const version = context.extension.packageJSON.version as string;
   const provider = new OpenAICodexProvider(
     oauth,
     output,
-    `codex_vscode/${version} VSCode/${vscode.version}`,
+    extensionUserAgent(version, vscode.version),
     context.globalState.get<CodexUsageSnapshot>(USAGE_STATE_KEY) ?? {},
   );
   const usageStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 91);
-  usageStatus.name = "OpenAI Codex usage";
+  usageStatus.name = "Codex Bridge usage";
   usageStatus.command = "openaiCodex.showUsage";
   renderUsageStatus(usageStatus, provider.getUsageSnapshot());
   context.subscriptions.push(
@@ -49,7 +50,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (event.affectsConfiguration("openaiCodex.showUsageStatusBar")) updateUsageStatusVisibility(usageStatus);
     }),
   );
-  output.appendLine(`[activate] OpenAI Codex for Copilot Chat ${version} on VS Code ${vscode.version}`);
+  output.appendLine(`[activate] ${EXTENSION_DISPLAY_NAME} ${version} on VS Code ${vscode.version}`);
   void oauth.hasSession().then((signedIn) => {
     if (!signedIn) return;
     updateUsageStatusVisibility(usageStatus);
@@ -65,16 +66,16 @@ async function manage(
 ): Promise<void> {
   const session = await oauth.sessionInfo();
   const picked = await vscode.window.showQuickPick(session ? [
-    { label: "$(pulse) Show OpenAI Codex usage", action: "usage" },
-    { label: "$(check) Test OpenAI Codex connection", action: "test" },
-    { label: "$(output) Show OpenAI Codex logs", action: "logs" },
-    { label: "$(sign-out) Sign out of OpenAI Codex", action: "signout" },
+    { label: "$(pulse) Show Codex usage", action: "usage" },
+    { label: "$(check) Test Codex connection", action: "test" },
+    { label: "$(output) Show Codex Bridge logs", action: "logs" },
+    { label: "$(sign-out) Sign out of Codex Bridge", action: "signout" },
   ] : [
     { label: "$(globe) Sign in with ChatGPT", action: "signin", description: "ChatGPT Plus or Pro" },
     { label: "$(link) Sign in manually", action: "manual", description: "Use if localhost:1455 is unavailable" },
-    { label: "$(terminal) Import Codex CLI session", action: "import", description: "Read ~/.codex/auth.json" },
-    { label: "$(output) Show OpenAI Codex logs", action: "logs" },
-  ], { title: `OpenAI Codex — ${session?.email ?? (session ? "signed in" : "not signed in")}` });
+    { label: "$(terminal) Import Codex CLI session (Advanced)", action: "import", description: "Copies OAuth credentials from ~/.codex/auth.json" },
+    { label: "$(output) Show Codex Bridge logs", action: "logs" },
+  ], { title: `Codex Bridge — ${session?.email ?? (session ? "signed in" : "not signed in")}` });
   if (!picked) return;
   if (picked.action === "signin") await browserSignIn(oauth, provider, output);
   else if (picked.action === "manual") await manualSignIn(oauth, provider, output);
@@ -87,7 +88,7 @@ async function manage(
     provider.clearUsage();
     usageStatus.hide();
     provider.fireDidChange();
-    vscode.window.showInformationMessage("Signed out of OpenAI Codex.");
+    vscode.window.showInformationMessage("Signed out of Codex Bridge.");
   }
 }
 
@@ -105,10 +106,10 @@ async function browserSignIn(oauth: OpenAIOAuth, provider: OpenAICodexProvider, 
     );
     provider.fireDidChange();
     void provider.refreshUsage().catch((error) => output.appendLine(`[usage] post-sign-in refresh failed: ${messageOf(error)}`));
-    vscode.window.showInformationMessage("Signed in to OpenAI Codex with ChatGPT.");
+    vscode.window.showInformationMessage("Signed in to Codex Bridge with ChatGPT.");
   } catch (error) {
     attempt?.cancel();
-    showError("OpenAI sign-in failed", error, output);
+    showError("ChatGPT sign-in failed", error, output);
   }
 }
 
@@ -118,22 +119,28 @@ async function manualSignIn(oauth: OpenAIOAuth, provider: OpenAICodexProvider, o
     await vscode.env.clipboard.writeText(flow.url);
     await vscode.env.openExternal(vscode.Uri.parse(flow.url));
     const callback = await vscode.window.showInputBox({
-      title: "OpenAI Codex manual sign-in",
-      prompt: "After signing in, paste the full localhost callback URL (or its code and state query string)",
+      title: "Codex Bridge manual sign-in",
+      prompt: "After signing in, paste the full localhost callback URL (or a query string containing both code and state)",
       ignoreFocusOut: true,
     });
     if (!callback) return;
     await oauth.completeAuthorization(callback, flow);
     provider.fireDidChange();
     void provider.refreshUsage().catch((error) => output.appendLine(`[usage] post-sign-in refresh failed: ${messageOf(error)}`));
-    vscode.window.showInformationMessage("Signed in to OpenAI Codex with ChatGPT.");
+    vscode.window.showInformationMessage("Signed in to Codex Bridge with ChatGPT.");
   } catch (error) {
-    showError("OpenAI manual sign-in failed", error, output);
+    showError("ChatGPT manual sign-in failed", error, output);
   }
 }
 
 async function importCodexSession(oauth: OpenAIOAuth, provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
   try {
+    const confirmed = await vscode.window.showWarningMessage(
+      "Importing a Codex CLI session copies its OAuth access and refresh credentials into VS Code Secret Storage. A fresh ChatGPT sign-in is recommended.",
+      { modal: true, detail: "Continue only if you trust this extension and want both clients to use credentials derived from the same CLI session." },
+      "Import session",
+    );
+    if (confirmed !== "Import session") return;
     const session = await oauth.importCodexCliSession();
     provider.fireDidChange();
     void provider.refreshUsage().catch((error) => output.appendLine(`[usage] post-import refresh failed: ${messageOf(error)}`));
@@ -146,13 +153,13 @@ async function importCodexSession(oauth: OpenAIOAuth, provider: OpenAICodexProvi
 async function testConnection(provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
   try {
     const result = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "Testing OpenAI Codex…" },
+      { location: vscode.ProgressLocation.Notification, title: "Testing Codex connection…" },
       () => provider.testConnection(),
     );
     output.appendLine(`[test] model=${result.model} speed=${result.speedMode} effort=${result.reasoningEffort} response=${result.text}`);
-    vscode.window.showInformationMessage(`OpenAI Codex verified with ${result.model} (${result.speedMode}, ${result.reasoningEffort}): ${result.text}`);
+    vscode.window.showInformationMessage(`Codex connection verified with ${result.model} (${result.speedMode}, ${result.reasoningEffort}): ${result.text}`);
   } catch (error) {
-    showError("OpenAI Codex connection test failed", error, output);
+    showError("Codex connection test failed", error, output);
   }
 }
 
@@ -160,7 +167,7 @@ async function showUsage(provider: OpenAICodexProvider, output: vscode.OutputCha
   let snapshot = provider.getUsageSnapshot();
   try {
     snapshot = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: "Refreshing OpenAI Codex usage…" },
+      { location: vscode.ProgressLocation.Window, title: "Refreshing Codex usage…" },
       () => provider.refreshUsage(),
     );
   } catch (error) {
@@ -173,8 +180,8 @@ async function showUsage(provider: OpenAICodexProvider, output: vscode.OutputCha
     { label: "$(link-external) Open ChatGPT Codex", action: "open", alwaysShow: true },
   ], {
     title: snapshot.updatedAt
-      ? `OpenAI Codex usage — updated ${new Date(snapshot.updatedAt).toLocaleTimeString()}`
-      : "OpenAI Codex usage",
+      ? `Codex usage — updated ${new Date(snapshot.updatedAt).toLocaleTimeString()}`
+      : "Codex usage",
     placeHolder: "Subscription quota and locally tracked inference tokens",
     matchOnDescription: true,
     matchOnDetail: true,
@@ -213,7 +220,7 @@ async function diagnostics(oauth: OpenAIOAuth, output: vscode.OutputChannel): Pr
   const models = await vscode.lm.selectChatModels({ vendor: "openai-codex" });
   const session = await oauth.sessionInfo();
   const content = [
-    "# OpenAI Codex for Copilot Chat diagnostics", "",
+    `# ${EXTENSION_DISPLAY_NAME} diagnostics`, "",
     `- VS Code: ${vscode.version}`,
     `- OAuth session: ${session ? "present" : "missing"}`,
     `- Account: ${session?.email ?? "unknown"}`,

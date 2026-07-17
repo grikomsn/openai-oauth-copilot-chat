@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve OpenAI Codex for GitHub Copilot Chat.
+Thanks for helping improve Codex Bridge for Copilot Chat.
 
 ## Before opening work
 

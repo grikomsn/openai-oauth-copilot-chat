@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/grikomsn/openai-oauth-copilot-chat/main/assets/cover.jpg" alt="OpenAI Codex and GitHub Copilot" width="960">
 </p>
 
-<h1 align="center">OpenAI Codex for GitHub Copilot Chat</h1>
+<h1 align="center">Codex Bridge for Copilot Chat</h1>
 
 <p align="center">Use OpenAI Codex models directly from the GitHub Copilot Chat model picker in Visual Studio Code with your ChatGPT Plus or Pro subscription.</p>
 
@@ -34,10 +34,10 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 
 ## Quick start
 
-1. Install [OpenAI Codex for GitHub Copilot Chat](https://marketplace.visualstudio.com/items?itemName=grikomsn.openai-oauth-copilot-chat). You need VS Code 1.125 or newer, GitHub Copilot Chat, and a ChatGPT account with Codex access.
-2. Run **OpenAI Codex: Manage Connection** from the Command Palette.
+1. Install [Codex Bridge for Copilot Chat](https://marketplace.visualstudio.com/items?itemName=grikomsn.openai-oauth-copilot-chat). You need VS Code 1.125 or newer, GitHub Copilot Chat, and a ChatGPT account with Codex access.
+2. Run **Codex Bridge: Manage Connection** from the Command Palette.
 3. Choose **Sign in with ChatGPT** and complete the browser flow.
-4. In Copilot Chat, open the model picker, choose **Manage Models**, enable **OpenAI Codex**, and select a Codex model.
+4. In Copilot Chat, open the model picker, choose **Manage Models**, enable **Codex Bridge**, and select a Codex model.
 
 Models contributed by this extension include an **(OAuth)** suffix so they remain distinguishable from models contributed by other installed OpenAI extensions.
 
@@ -45,15 +45,15 @@ If another process uses local port `1455`, choose **Sign in manually**. If the C
 
 ## Commands
 
-| Command                                | Purpose                                                      |
-| -------------------------------------- | ------------------------------------------------------------ |
-| OpenAI Codex: Manage Connection        | Sign in, test, inspect logs, or sign out                     |
-| OpenAI Codex: Sign In with ChatGPT     | Start the local browser OAuth flow                           |
-| OpenAI Codex: Sign In Manually         | Paste a callback URL when port 1455 is unavailable           |
-| OpenAI Codex: Import Codex CLI Session | Import an existing local Codex CLI login                     |
-| OpenAI Codex: Test Connection          | Send a small live request to the Codex backend               |
-| OpenAI Codex: Show Usage               | Refresh and inspect subscription quota plus inference tokens |
-| OpenAI Codex: Show Diagnostics         | Show session presence and registered models without secrets  |
+| Command                                                   | Purpose                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| Codex Bridge: Manage Connection                           | Sign in, test, inspect logs, or sign out                     |
+| Codex Bridge: Sign In with ChatGPT                        | Start the local browser OAuth flow                           |
+| Codex Bridge: Sign In Manually                            | Paste a callback URL when port 1455 is unavailable           |
+| Codex Bridge: Import Codex CLI Session (Advanced)         | Copy an existing local Codex CLI login after a warning       |
+| Codex Bridge: Test Connection                             | Send a small live request to the Codex backend               |
+| Codex Bridge: Show Usage                                  | Refresh and inspect subscription quota plus inference tokens |
+| Codex Bridge: Show Diagnostics                            | Show session presence and registered models without secrets  |
 
 ## Settings
 
@@ -77,5 +77,7 @@ The status bar reads the same ChatGPT Codex quota endpoint used by Codex CLI and
 ## Privacy and status
 
 OAuth tokens are stored through VS Code Secret Storage and are sent only to OpenAI authentication and ChatGPT Codex endpoints. This is an independent community extension, not an official OpenAI or GitHub product. The ChatGPT Codex backend is not a public compatibility API and can change; see [docs/security.md](docs/security.md).
+
+Requests identify this extension as `openai-oauth-copilot-chat`; they do not claim to originate from the official Codex CLI or VS Code extension. The shared OAuth client and ChatGPT backend are undocumented integration surfaces, so OpenAI may change or revoke compatibility without notice.
 
 Unofficial project; not affiliated with OpenAI, GitHub, or Microsoft. The ChatGPT Codex backend is not a public compatibility API and can change. Licensed under [MIT](LICENSE).

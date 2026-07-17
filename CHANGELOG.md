@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- d936863: Identify requests as Codex Bridge, require OAuth callback state validation, clarify CLI credential import, and update the extension's visible product name.
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/grikomsn/openai-oauth-copilot-chat/security/policy
+    about: Review the private reporting instructions; do not disclose vulnerabilities publicly.
+  - name: Questions and support
+    url: https://github.com/grikomsn/openai-oauth-copilot-chat/discussions/new?category=q-a
+    about: Ask setup and usage questions in Discussions.

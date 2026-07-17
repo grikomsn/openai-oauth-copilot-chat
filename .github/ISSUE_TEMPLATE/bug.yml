@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a reproducible extension problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not include OAuth tokens, private prompts, or other sensitive data. Report vulnerabilities through the security policy instead.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions.
+          required: true
+        - label: I am using the latest Marketplace version.
+          required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version
+      placeholder: 0.3.0
+    validations:
+      required: true
+
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+      description: Run `code --version` or use Help → About.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and environment
+      placeholder: macOS 26; local VS Code
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: OpenAI Codex model
+      description: Leave blank if the problem occurs before model selection.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: Describe what happened and how often.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Run …
+        2. Select …
+        3. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics or logs
+      description: Paste relevant output after removing tokens, prompts, and personal data.
+      render: text

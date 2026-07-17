@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+### Patch Changes
+
+- Keep separate Codex reasoning summaries in distinct Copilot Chat thinking blocks.
+
 ## 0.3.0
 
 - Normalize Codex Responses token usage for Copilot Chat context-window accounting

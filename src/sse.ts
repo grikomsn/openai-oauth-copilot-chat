@@ -1,6 +1,7 @@
 export interface CodexStreamEvent {
   text?: string;
   reasoning?: string;
+  reasoningBoundary?: true;
   encryptedReasoning?: { id: string; data: string };
   toolCall?: { id: string; name: string; arguments: string };
   usage?: Record<string, unknown>;
@@ -47,6 +48,9 @@ export class ResponsesStreamParser {
     if (type === "response.output_text.delta" && delta) return [{ text: delta }];
     if ((type === "response.reasoning_summary_text.delta" || type === "response.reasoning_text.delta") && delta) {
       return [{ reasoning: delta }];
+    }
+    if (type === "response.reasoning_summary_part.done") {
+      return [{ reasoningBoundary: true }];
     }
     if (type === "response.function_call_arguments.delta") {
       const id = stringField(value, "item_id") ?? stringField(value, "call_id") ?? String(value.output_index ?? "tool");

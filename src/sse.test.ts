@@ -10,6 +10,25 @@ test("parses fragmented Codex text and reasoning SSE", () => {
   ]);
 });
 
+test("preserves boundaries between reasoning summary parts", () => {
+  const parser = new ResponsesStreamParser();
+  const events = parser.push([
+    'data: {"type":"response.reasoning_summary_part.added","item_id":"r1","summary_index":0,"part":{"type":"summary_text","text":""}}',
+    'data: {"type":"response.reasoning_summary_text.delta","item_id":"r1","summary_index":0,"delta":"Planning commit and review workflow"}',
+    'data: {"type":"response.reasoning_summary_part.done","item_id":"r1","summary_index":0,"part":{"type":"summary_text","text":"Planning commit and review workflow"}}',
+    'data: {"type":"response.reasoning_summary_part.added","item_id":"r1","summary_index":1,"part":{"type":"summary_text","text":""}}',
+    'data: {"type":"response.reasoning_summary_text.delta","item_id":"r1","summary_index":1,"delta":"Preparing staged commits for fixes"}',
+    'data: {"type":"response.reasoning_summary_part.done","item_id":"r1","summary_index":1,"part":{"type":"summary_text","text":"Preparing staged commits for fixes"}}',
+  ].join("\n\n") + "\n\n");
+
+  assert.deepEqual(events, [
+    { reasoning: "Planning commit and review workflow" },
+    { reasoningBoundary: true },
+    { reasoning: "Preparing staged commits for fixes" },
+    { reasoningBoundary: true },
+  ]);
+});
+
 test("emits completed function calls", () => {
   const parser = new ResponsesStreamParser();
   const events = parser.push('data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"c1","name":"read_file","arguments":"{\\"path\\":\\"a\\"}"}}\n\n');

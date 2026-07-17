@@ -2,7 +2,7 @@
   "name": "openai-oauth-copilot-chat",
   "displayName": "OpenAI Codex for GitHub Copilot Chat",
   "description": "Use OpenAI Codex models in GitHub Copilot Chat with your ChatGPT Plus or Pro subscription.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "grikomsn",
   "license": "MIT",
   "icon": "assets/icon.png",
@@ -17,8 +17,19 @@
   "engines": {
     "vscode": "^1.125.0"
   },
-  "categories": ["AI", "Chat", "Machine Learning"],
-  "keywords": ["openai", "codex", "chatgpt", "copilot", "oauth", "language-model"],
+  "categories": [
+    "AI",
+    "Chat",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "openai",
+    "codex",
+    "chatgpt",
+    "copilot",
+    "oauth",
+    "language-model"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "onLanguageModelChatProvider:openai-codex"
@@ -26,28 +37,62 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "openaiCodex.manage", "title": "OpenAI Codex: Manage Connection" },
-      { "command": "openaiCodex.signIn", "title": "OpenAI Codex: Sign In with ChatGPT" },
-      { "command": "openaiCodex.signInManual", "title": "OpenAI Codex: Sign In Manually" },
-      { "command": "openaiCodex.importCodexSession", "title": "OpenAI Codex: Import Codex CLI Session" },
-      { "command": "openaiCodex.testConnection", "title": "OpenAI Codex: Test Connection" },
-      { "command": "openaiCodex.showUsage", "title": "OpenAI Codex: Show Usage" },
-      { "command": "openaiCodex.diagnostics", "title": "OpenAI Codex: Show Diagnostics" }
+      {
+        "command": "openaiCodex.manage",
+        "title": "OpenAI Codex: Manage Connection"
+      },
+      {
+        "command": "openaiCodex.signIn",
+        "title": "OpenAI Codex: Sign In with ChatGPT"
+      },
+      {
+        "command": "openaiCodex.signInManual",
+        "title": "OpenAI Codex: Sign In Manually"
+      },
+      {
+        "command": "openaiCodex.importCodexSession",
+        "title": "OpenAI Codex: Import Codex CLI Session"
+      },
+      {
+        "command": "openaiCodex.testConnection",
+        "title": "OpenAI Codex: Test Connection"
+      },
+      {
+        "command": "openaiCodex.showUsage",
+        "title": "OpenAI Codex: Show Usage"
+      },
+      {
+        "command": "openaiCodex.diagnostics",
+        "title": "OpenAI Codex: Show Diagnostics"
+      }
     ],
     "configuration": {
       "title": "OpenAI Codex for Copilot Chat",
       "properties": {
         "openaiCodex.reasoningEffort": {
           "type": "string",
-          "enum": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
           "default": "high",
           "description": "Default reasoning effort sent to Codex. A model-picker selection overrides this value; unsupported high-effort requests automatically retry with high."
         },
         "openaiCodex.speedMode": {
           "type": "string",
-          "enum": ["normal", "fast"],
+          "enum": [
+            "normal",
+            "fast"
+          ],
           "default": "normal",
-          "enumDescriptions": ["Standard speed and usage", "1.5x speed with increased usage on supported models"],
+          "enumDescriptions": [
+            "Standard speed and usage",
+            "1.5x speed with increased usage on supported models"
+          ],
           "description": "Default Codex processing speed. A model-picker selection overrides this value."
         },
         "openaiCodex.requestTimeoutSeconds": {

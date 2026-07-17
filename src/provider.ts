@@ -327,6 +327,10 @@ function reportEvent(event: CodexStreamEvent, progress: vscode.Progress<vscode.L
     const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: typeof vscode.LanguageModelThinkingPart }).LanguageModelThinkingPart;
     if (ThinkingPart) progress.report(new ThinkingPart(event.reasoning));
   }
+  if (event.reasoningBoundary) {
+    const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: typeof vscode.LanguageModelThinkingPart }).LanguageModelThinkingPart;
+    if (ThinkingPart) progress.report(new ThinkingPart("", "", { vscode_reasoning_done: true }));
+  }
   if (event.encryptedReasoning) {
     const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: typeof vscode.LanguageModelThinkingPart }).LanguageModelThinkingPart;
     if (ThinkingPart) progress.report(new ThinkingPart([], event.encryptedReasoning.id, {

@@ -74,6 +74,11 @@ The status bar reads the same ChatGPT Codex quota endpoint used by Codex CLI and
 - [OAuth and security](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/security.md)
 - [Development and releases](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/development.md)
 
+## Related projects
+
+- [Grok for GitHub Copilot Chat](https://github.com/grikomsn/grok-copilot-chat) — Use xAI Grok models directly from the GitHub Copilot Chat model picker in Visual Studio Code.
+- [Poolside for GitHub Copilot Chat](https://github.com/grikomsn/poolside-copilot-chat) — Use hosted Poolside coding models directly from the GitHub Copilot Chat model picker in Visual Studio Code.
+
 ## Privacy and status
 
 OAuth tokens are stored through VS Code Secret Storage and are sent only to OpenAI authentication and ChatGPT Codex endpoints. This is an independent community extension, not an official OpenAI or GitHub product. The ChatGPT Codex backend is not a public compatibility API and can change; see [docs/security.md](docs/security.md).

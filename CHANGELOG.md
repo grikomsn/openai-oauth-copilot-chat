@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- Refresh the Codex model picker metadata to match the current upstream catalog, including the visible GPT-5.6 family, corrected 272K context windows, and updated GPT-5.2 reasoning options.
+
 ## 0.4.0
 
 ### Minor Changes

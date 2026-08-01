@@ -7,6 +7,7 @@ import {
   resolveModelRequestOptions,
   type ModelRequestOptions,
 } from "./model-options";
+import { CODEX_MODELS } from "./model-catalog";
 import { OpenAIOAuth } from "./oauth";
 import {
   CHATGPT_CODEX_RESPONSES_URL,
@@ -22,17 +23,6 @@ import {
 } from "./usage";
 
 const DEFAULT_INSTRUCTIONS = "You are OpenAI Codex, a coding agent in Visual Studio Code. Be concise, correct, and use the supplied tools when useful.";
-const MODELS: ReadonlyArray<{ id: string; input: number; output: number; image?: boolean }> = [
-  { id: "gpt-5.6-sol", input: 372_000, output: 128_000, image: true },
-  { id: "gpt-5.6-terra", input: 372_000, output: 128_000, image: true },
-  { id: "gpt-5.6-luna", input: 372_000, output: 128_000, image: true },
-  { id: "gpt-5.5", input: 272_000, output: 128_000, image: true },
-  { id: "gpt-5.4", input: 272_000, output: 128_000, image: true },
-  { id: "gpt-5.4-mini", input: 128_000, output: 64_000, image: true },
-  { id: "gpt-5.3-codex", input: 272_000, output: 128_000, image: true },
-  { id: "gpt-5.3-codex-spark", input: 128_000, output: 64_000, image: true },
-  { id: "gpt-5.2", input: 272_000, output: 128_000, image: true },
-];
 
 export interface CodexModel extends vscode.LanguageModelChatInformation {
   rawModelId: string;
@@ -92,7 +82,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    return MODELS.map((model) => {
+    return CODEX_MODELS.map((model) => {
       const defaults = resolveRequestOptions(model.id, undefined);
       return {
         id: model.id,
@@ -152,7 +142,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   async testConnection(): Promise<{ model: string; text: string; speedMode: string; reasoningEffort: string }> {
-    const model = MODELS[0].id;
+    const model = CODEX_MODELS[0].id;
     const requestOptions = resolveRequestOptions(model, undefined);
     const credentials = await this.oauth.getAccessToken();
     const body = applyModelRequestOptions({

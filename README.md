@@ -26,6 +26,10 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 - Browser callback, manual callback, and optional Codex CLI session import
 - Connection test and privacy-safe diagnostics commands
 
+The current model picker exposes GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna,
+GPT-5.5, and GPT-5.2. Model-specific reasoning efforts and Fast mode options
+follow the current Codex catalog; all five models accept image input.
+
 ## Requirements
 
 - VS Code 1.125 or newer

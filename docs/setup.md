@@ -8,6 +8,10 @@ Use **Codex Bridge: Manage Connection** to authenticate. After sign-in, open Cop
 
 Supported models expose a combined **Speed & Effort** menu with choices such as **Normal · Medium** and **Fast · High**. Normal mode uses standard processing. Fast mode requests roughly 1.5× generation speed with increased account usage. The picker selection applies to that request and overrides the two independent workspace defaults.
 
+Codex Bridge currently exposes GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna,
+GPT-5.5, and GPT-5.2. Older Codex model families may be retired or hidden by
+the upstream catalog and are not registered by the extension.
+
 After sign-in, the **Codex** status-bar item shows ChatGPT subscription utilization for the primary and secondary quota windows. Click it to refresh quota, inspect reset times, or view exact input/output tokens from the most recent inference. Those normalized token counts are also reported to Copilot Chat so its context-window percentage reflects real usage.
 
 ## Browser callback problems

@@ -35,13 +35,9 @@ const MODEL_OPTIONS: Readonly<Record<string, ModelOptionSpec>> = {
     supportsFast: true,
   },
   "gpt-5.5": { ...DEFAULT_SPEC, defaultEffort: "medium", supportsFast: true },
-  "gpt-5.4": { ...DEFAULT_SPEC, defaultEffort: "medium", supportsFast: true },
-  "gpt-5.4-mini": { ...DEFAULT_SPEC, defaultEffort: "medium" },
-  "gpt-5.3-codex": { ...DEFAULT_SPEC },
-  "gpt-5.3-codex-spark": { ...DEFAULT_SPEC },
   "gpt-5.2": {
-    efforts: ["none", "low", "medium", "high", "xhigh"],
-    defaultEffort: "high",
+    efforts: ["low", "medium", "high", "xhigh"],
+    defaultEffort: "medium",
     supportsFast: false,
   },
 };

@@ -42,7 +42,7 @@ test("normal mode omits service_tier", () => {
 test("unsupported fast mode and effort safely fall back per model", () => {
   assert.deepEqual(
     resolveModelRequestOptions(
-      "gpt-5.4-mini",
+      "gpt-5.2",
       { speedMode: "fast", reasoningEffort: "ultra" },
       {},
     ),
@@ -57,7 +57,7 @@ test("configuration schema exposes every speed and effort combination in one hos
     "fast:low", "fast:medium", "fast:high", "fast:xhigh", "fast:max", "fast:ultra",
   ]);
 
-  const normalOnlySchema = buildModelConfigurationSchema("gpt-5.4-mini");
+  const normalOnlySchema = buildModelConfigurationSchema("gpt-5.2");
   assert.deepEqual(normalOnlySchema.properties.mode.enum, [
     "normal:low", "normal:medium", "normal:high", "normal:xhigh",
   ]);

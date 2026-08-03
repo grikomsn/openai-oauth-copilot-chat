@@ -5,6 +5,7 @@ export interface TokenUsage {
   completionTokens?: number;
   totalTokens?: number;
   cachedTokens?: number;
+  cacheWriteTokens?: number;
   reasoningTokens?: number;
 }
 
@@ -14,6 +15,7 @@ export interface TrackedTokenUsage {
   completionTokens: number;
   totalTokens: number;
   cachedTokens: number;
+  cacheWriteTokens?: number;
   reasoningTokens: number;
 }
 
@@ -47,7 +49,7 @@ export interface ProviderUsagePayload {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
-  prompt_tokens_details?: { cached_tokens: number };
+  prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
   completion_tokens_details?: { reasoning_tokens: number };
 }
 
@@ -61,11 +63,15 @@ export interface UsageDisplayRow {
 export function toProviderUsagePayload(raw: Record<string, unknown>): ProviderUsagePayload | undefined {
   const usage = normalizeTokenUsage(raw);
   if (usage.promptTokens === undefined && usage.completionTokens === undefined && usage.totalTokens === undefined) return undefined;
+  const promptTokenDetails = compactObject({
+    cached_tokens: usage.cachedTokens,
+    cache_write_tokens: usage.cacheWriteTokens,
+  });
   return compactObject({
     prompt_tokens: usage.promptTokens,
     completion_tokens: usage.completionTokens,
     total_tokens: usage.totalTokens,
-    prompt_tokens_details: usage.cachedTokens === undefined ? undefined : { cached_tokens: usage.cachedTokens },
+    prompt_tokens_details: Object.keys(promptTokenDetails).length ? promptTokenDetails : undefined,
     completion_tokens_details: usage.reasoningTokens === undefined ? undefined : { reasoning_tokens: usage.reasoningTokens },
   });
 }
@@ -87,6 +93,7 @@ export function recordRequestUsage(
       completionTokens: (previous?.completionTokens ?? 0) + (usage.completionTokens ?? 0),
       totalTokens: (previous?.totalTokens ?? 0) + (usage.totalTokens ?? 0),
       cachedTokens: (previous?.cachedTokens ?? 0) + (usage.cachedTokens ?? 0),
+      cacheWriteTokens: (previous?.cacheWriteTokens ?? 0) + (usage.cacheWriteTokens ?? 0),
       reasoningTokens: (previous?.reasoningTokens ?? 0) + (usage.reasoningTokens ?? 0),
     },
     updatedAt: recordedAt,
@@ -174,7 +181,7 @@ export function formatUsageRows(snapshot: CodexUsageSnapshot, now = Date.now()):
     kind: "tracked",
     label: "Tracked on this device",
     description: `${snapshot.tracked.requests.toLocaleString()} requests · ${snapshot.tracked.totalTokens.toLocaleString()} tokens`,
-    detail: `${snapshot.tracked.promptTokens.toLocaleString()} input · ${snapshot.tracked.completionTokens.toLocaleString()} output · ${snapshot.tracked.cachedTokens.toLocaleString()} cached`,
+    detail: `${snapshot.tracked.promptTokens.toLocaleString()} input · ${snapshot.tracked.completionTokens.toLocaleString()} output · ${snapshot.tracked.cachedTokens.toLocaleString()} cached · ${(snapshot.tracked.cacheWriteTokens ?? 0).toLocaleString()} cache write`,
   });
   if (snapshot.credits && (snapshot.credits.balance || snapshot.credits.unlimited)) rows.push({
     kind: "credits",
@@ -198,6 +205,7 @@ function normalizeTokenUsage(raw: Record<string, unknown>): Omit<TokenUsage, "mo
       promptTokens !== undefined && completionTokens !== undefined ? promptTokens + completionTokens : undefined
     ),
     cachedTokens: numberValue(inputDetails?.cached_tokens),
+    cacheWriteTokens: numberValue(inputDetails?.cache_write_tokens),
     reasoningTokens: numberValue(outputDetails?.reasoning_tokens),
   });
 }
@@ -228,7 +236,11 @@ function windowSummary(window: RateLimitWindow, now: number): string {
 }
 
 function requestSummary(usage: TokenUsage): string {
-  return `${exactCount(usage.promptTokens)} input + ${exactCount(usage.completionTokens)} output = ${exactCount(usage.totalTokens)} tokens`;
+  const cache = [
+    usage.cachedTokens === undefined ? undefined : `${exactCount(usage.cachedTokens)} cached`,
+    usage.cacheWriteTokens === undefined ? undefined : `${exactCount(usage.cacheWriteTokens)} cache write`,
+  ].filter((value): value is string => Boolean(value));
+  return `${exactCount(usage.promptTokens)} input + ${exactCount(usage.completionTokens)} output = ${exactCount(usage.totalTokens)} tokens${cache.length ? ` · ${cache.join(" · ")}` : ""}`;
 }
 
 function windowLabel(window: RateLimitWindow): string {

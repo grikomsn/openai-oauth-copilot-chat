@@ -68,6 +68,42 @@ test("maps the visible remote catalog metadata", () => {
   ]);
 });
 
+test("falls back from an internal default to the highest selectable reasoning level", () => {
+  const [model] = parseCodexModelsPayload({ models: [remoteModel({
+    default_reasoning_level: "ultra",
+    supported_reasoning_levels: [
+      { effort: "low", description: "Fast responses" },
+      { effort: "xhigh", description: "Extra high reasoning" },
+      { effort: "max", description: "Maximum reasoning" },
+      { effort: "ultra", description: "Automatic delegation" },
+    ],
+  })] });
+
+  assert.deepEqual(model.reasoningLevels.map(({ effort }) => effort), ["low", "xhigh", "max"]);
+  assert.equal(model.defaultReasoningEffort, "max");
+});
+
+test("skips models without selectable reasoning levels", () => {
+  const models = parseCodexModelsPayload({ models: [
+    remoteModel({
+      slug: "ultra-only",
+      priority: 1,
+      default_reasoning_level: "ultra",
+      supported_reasoning_levels: [{ effort: "ultra", description: "Automatic delegation" }],
+    }),
+    remoteModel({ slug: "selectable", priority: 2 }),
+  ] });
+
+  assert.deepEqual(models.map(({ id }) => id), ["selectable"]);
+  assert.throws(
+    () => parseCodexModelsPayload({ models: [remoteModel({
+      default_reasoning_level: "ultra",
+      supported_reasoning_levels: [{ effort: "ultra", description: "Automatic delegation" }],
+    })] }),
+    /no visible models/,
+  );
+});
+
 test("expands Fast models without changing their backend slug", () => {
   const [model] = parseCodexModelsPayload({ models: [remoteModel({
     slug: "gpt-5.6-terra",

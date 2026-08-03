@@ -70,7 +70,7 @@ export function parseCodexModelsPayload(payload: unknown): CodexModelMetadata[] 
   const visibleModels = models
     .filter((model) => model.visibility === "list")
     .sort((left, right) => left.priority - right.priority)
-    .map(parseModel);
+    .flatMap((model) => parseModel(model) ?? []);
   if (!visibleModels.length) throw new Error("Codex model response contains no visible models");
   return visibleModels;
 }
@@ -99,7 +99,12 @@ export function formatCodexDisplayName(displayName: string): string {
   return displayName.replaceAll("-", " ").replaceAll("GPT", "Codex").replace(/\s+/g, " ").trim();
 }
 
-function parseModel(model: RemoteCodexModel): CodexModelMetadata {
+function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {
+  const reasoningLevels = model.supported_reasoning_levels.filter(({ effort }) => effort !== "ultra");
+  const defaultReasoningLevel = reasoningLevels.find(({ effort }) => effort === model.default_reasoning_level)
+    ?? reasoningLevels.at(-1);
+  if (!defaultReasoningLevel) return undefined;
+
   const { input, output } = codexTokenLimits(model);
   const supportsFast = model.additional_speed_tiers.includes("fast");
   const fastDescription = supportsFast
@@ -117,8 +122,8 @@ function parseModel(model: RemoteCodexModel): CodexModelMetadata {
     toolCalling: model.shell_type !== "disabled",
     supportsParallelToolCalls: model.supports_parallel_tool_calls,
     supportsReasoningSummaryParameter: model.supports_reasoning_summary_parameter,
-    reasoningLevels: model.supported_reasoning_levels.filter(({ effort }) => effort !== "ultra"),
-    defaultReasoningEffort: model.default_reasoning_level,
+    reasoningLevels,
+    defaultReasoningEffort: defaultReasoningLevel.effort,
     defaultReasoningSummary: model.default_reasoning_summary,
     supportsFast,
     fastDescription,

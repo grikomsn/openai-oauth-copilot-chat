@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("openaiCodex.showUsage", () => showUsage(provider, output)),
     vscode.commands.registerCommand("openaiCodex.diagnostics", () => diagnostics(oauth, output)),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("openaiCodex.speedMode") || event.affectsConfiguration("openaiCodex.reasoningEffort")) {
+      if (event.affectsConfiguration("openaiCodex.reasoningSummary")) {
         provider.fireDidChange();
       }
       if (event.affectsConfiguration("openaiCodex.showUsageStatusBar")) updateUsageStatusVisibility(usageStatus);
@@ -156,8 +156,8 @@ async function testConnection(provider: OpenAICodexProvider, output: vscode.Outp
       { location: vscode.ProgressLocation.Notification, title: "Testing Codex connection…" },
       () => provider.testConnection(),
     );
-    output.appendLine(`[test] model=${result.model} speed=${result.speedMode} effort=${result.reasoningEffort} response=${result.text}`);
-    vscode.window.showInformationMessage(`Codex connection verified with ${result.model} (${result.speedMode}, ${result.reasoningEffort}): ${result.text}`);
+    output.appendLine(`[test] model=${result.model} speed=${result.speedMode} effort=${result.reasoningEffort} summary=${result.reasoningSummary} response=${result.text}`);
+    vscode.window.showInformationMessage(`Codex connection verified with ${result.model} (${result.speedMode}, ${result.reasoningEffort}, ${result.reasoningSummary} summary): ${result.text}`);
   } catch (error) {
     showError("Codex connection test failed", error, output);
   }

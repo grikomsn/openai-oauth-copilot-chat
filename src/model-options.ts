@@ -1,117 +1,119 @@
-export type SpeedMode = "normal" | "fast";
-export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+import {
+  REASONING_SUMMARIES,
+  type CodexModelMetadata,
+  type ReasoningEffort,
+  type ReasoningSummary,
+  type SpeedMode,
+} from "./model-catalog";
+
+export type { ReasoningEffort, ReasoningSummary, SpeedMode } from "./model-catalog";
 
 export interface ModelOptionSpec {
   efforts: readonly ReasoningEffort[];
+  descriptions: Readonly<Partial<Record<ReasoningEffort, string>>>;
   defaultEffort: ReasoningEffort;
-  supportsFast: boolean;
+  supportsReasoningSummaryParameter: boolean;
+  defaultReasoningSummary: ReasoningSummary;
 }
 
 export interface ModelRequestOptions {
   speedMode: SpeedMode;
   reasoningEffort: ReasoningEffort;
+  reasoningSummary: ReasoningSummary;
 }
 
-const DEFAULT_SPEC: ModelOptionSpec = {
-  efforts: ["low", "medium", "high", "xhigh"],
-  defaultEffort: "high",
-  supportsFast: false,
-};
-
-const MODEL_OPTIONS: Readonly<Record<string, ModelOptionSpec>> = {
-  "gpt-5.6-sol": {
-    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    defaultEffort: "low",
-    supportsFast: true,
-  },
-  "gpt-5.6-terra": {
-    efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
-    defaultEffort: "medium",
-    supportsFast: true,
-  },
-  "gpt-5.6-luna": {
-    efforts: ["low", "medium", "high", "xhigh", "max"],
-    defaultEffort: "medium",
-    supportsFast: true,
-  },
-  "gpt-5.5": { ...DEFAULT_SPEC, defaultEffort: "medium", supportsFast: true },
-  "gpt-5.2": {
-    efforts: ["low", "medium", "high", "xhigh"],
-    defaultEffort: "medium",
-    supportsFast: false,
-  },
-};
-
-export function modelOptionSpec(modelId: string): ModelOptionSpec {
-  return MODEL_OPTIONS[modelId] ?? DEFAULT_SPEC;
+export function modelOptionSpec(
+  model: Pick<
+    CodexModelMetadata,
+    "reasoningLevels" | "defaultReasoningEffort" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
+  >,
+): ModelOptionSpec {
+  return {
+    efforts: model.reasoningLevels.map((level) => level.effort),
+    descriptions: Object.fromEntries(model.reasoningLevels.map((level) => [level.effort, level.description])),
+    defaultEffort: model.defaultReasoningEffort,
+    supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
+    defaultReasoningSummary: model.defaultReasoningSummary,
+  };
 }
 
 export function resolveModelRequestOptions(
-  modelId: string,
+  spec: ModelOptionSpec,
   requestConfiguration: Readonly<Record<string, unknown>> | undefined,
   workspaceDefaults: Readonly<Record<string, unknown>>,
+  speedMode: SpeedMode,
 ): ModelRequestOptions {
-  const spec = modelOptionSpec(modelId);
-  const pickerMode = parsePickerMode(stringOption(requestConfiguration, "mode"));
-  const requestedEffort = pickerMode?.reasoningEffort
-    ?? stringOption(requestConfiguration, "reasoningEffort")
-    ?? stringOption(workspaceDefaults, "reasoningEffort");
-  const requestedSpeed = pickerMode?.speedMode
-    ?? stringOption(requestConfiguration, "speedMode")
-    ?? stringOption(workspaceDefaults, "speedMode");
+  const requestedEffort = parseConfiguredEffort(stringOption(requestConfiguration, "reasoningEffort"))
+    ?? parseLegacyMode(stringOption(requestConfiguration, "mode"));
+  const requestedSummary = parseConfiguredSummary(stringOption(requestConfiguration, "reasoningSummary"))
+    ?? parseConfiguredSummary(stringOption(workspaceDefaults, "reasoningSummary"));
   return {
-    reasoningEffort: spec.efforts.includes(requestedEffort as ReasoningEffort)
-      ? requestedEffort as ReasoningEffort
+    reasoningEffort: requestedEffort && spec.efforts.includes(requestedEffort)
+      ? requestedEffort
       : spec.defaultEffort,
-    speedMode: spec.supportsFast && requestedSpeed === "fast" ? "fast" : "normal",
+    reasoningSummary: requestedSummary === "model" || requestedSummary === undefined
+      ? spec.defaultReasoningSummary
+      : requestedSummary,
+    speedMode,
   };
 }
 
 export function buildModelConfigurationSchema(
-  modelId: string,
+  spec: ModelOptionSpec,
   defaults?: ModelRequestOptions,
 ): {
   type: "object";
   properties: Record<string, Record<string, unknown>>;
 } {
-  const spec = modelOptionSpec(modelId);
-  const speeds: readonly SpeedMode[] = spec.supportsFast ? ["normal", "fast"] : ["normal"];
-  const modes = speeds.flatMap((speedMode) => spec.efforts.map((reasoningEffort) => ({
-    speedMode,
-    reasoningEffort,
-    value: `${speedMode}:${reasoningEffort}`,
-  })));
-  const defaultSpeed = spec.supportsFast && defaults?.speedMode === "fast" ? "fast" : "normal";
   const defaultEffort = defaults && spec.efforts.includes(defaults.reasoningEffort)
     ? defaults.reasoningEffort
     : spec.defaultEffort;
-  const properties: Record<string, Record<string, unknown>> = {};
-  properties.mode = {
-    type: "string",
-    title: spec.supportsFast ? "Speed & Effort" : "Reasoning Effort",
-    enum: modes.map((mode) => mode.value),
-    enumItemLabels: modes.map((mode) => spec.supportsFast
-      ? `${formatOptionLabel(mode.speedMode)} · ${formatOptionLabel(mode.reasoningEffort)}`
-      : formatOptionLabel(mode.reasoningEffort)),
-    enumDescriptions: modes.map((mode) => {
-      const speed = mode.speedMode === "fast"
-        ? "1.5x speed with increased usage"
-        : "Standard speed and usage";
-      return spec.supportsFast ? `${speed}; ${effortDescription(mode.reasoningEffort)}` : effortDescription(mode.reasoningEffort);
-    }),
-    default: `${defaultSpeed}:${defaultEffort}`,
-    group: "navigation",
+  const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
+  return {
+    type: "object",
+    properties: {
+      reasoningEffort: {
+        type: "string",
+        title: "Reasoning Effort",
+        enum: [...spec.efforts],
+        enumItemLabels: spec.efforts.map(formatOptionLabel),
+        enumDescriptions: spec.efforts.map((effort) => spec.descriptions[effort] ?? formatOptionLabel(effort)),
+        default: defaultEffort,
+        group: "navigation",
+      },
+      ...(spec.supportsReasoningSummaryParameter ? {
+        reasoningSummary: {
+          type: "string",
+          title: "Reasoning Summary",
+          enum: [...REASONING_SUMMARIES],
+          enumItemLabels: REASONING_SUMMARIES.map(formatOptionLabel),
+          enumDescriptions: [
+            "Let Codex choose the summary detail",
+            "Return a concise reasoning summary",
+            "Return a detailed reasoning summary",
+            "Do not request a reasoning summary",
+          ],
+          default: defaultSummary,
+          group: "navigation",
+        },
+      } : {}),
+    },
   };
-  return { type: "object", properties };
 }
 
 export function applyModelRequestOptions(
   body: Readonly<Record<string, unknown>>,
   options: ModelRequestOptions,
+  supportsReasoningSummaryParameter = true,
 ): Record<string, unknown> {
   return {
     ...body,
-    reasoning: { effort: options.reasoningEffort, summary: "auto" },
+    reasoning: {
+      effort: options.reasoningEffort,
+      ...(supportsReasoningSummaryParameter && options.reasoningSummary !== "none"
+        ? { summary: options.reasoningSummary }
+        : {}),
+    },
     ...(options.speedMode === "fast" ? { service_tier: "priority" } : {}),
   };
 }
@@ -120,27 +122,23 @@ function stringOption(value: Readonly<Record<string, unknown>> | undefined, key:
   return typeof value?.[key] === "string" ? value[key] as string : undefined;
 }
 
-function parsePickerMode(value: string | undefined): ModelRequestOptions | undefined {
+function parseConfiguredEffort(value: string | undefined): ReasoningEffort | undefined {
+  return value && value !== "model" ? value : undefined;
+}
+
+function parseConfiguredSummary(value: string | undefined): ReasoningSummary | "model" | undefined {
+  return value === "model" ? value : REASONING_SUMMARIES.find((summary) => summary === value);
+}
+
+function parseLegacyMode(value: string | undefined): ReasoningEffort | undefined {
   if (!value) return undefined;
-  const [speedMode, reasoningEffort, extra] = value.split(":");
-  if (extra !== undefined || !["normal", "fast"].includes(speedMode)) return undefined;
-  if (!["none", "low", "medium", "high", "xhigh", "max", "ultra"].includes(reasoningEffort)) return undefined;
-  return { speedMode: speedMode as SpeedMode, reasoningEffort: reasoningEffort as ReasoningEffort };
+  const parts = value.split(":");
+  if (parts.length > 2) return undefined;
+  const effort = parts.length === 2 ? parts[1] : parts[0];
+  return effort || undefined;
 }
 
 function formatOptionLabel(value: string): string {
   if (value === "xhigh") return "Extra High";
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function effortDescription(value: ReasoningEffort): string {
-  switch (value) {
-    case "none": return "No additional reasoning";
-    case "low": return "Faster responses with lighter reasoning";
-    case "medium": return "Balanced speed and reasoning depth";
-    case "high": return "Greater reasoning depth for complex problems";
-    case "xhigh": return "Extra-high reasoning depth";
-    case "max": return "Maximum reasoning depth";
-    case "ultra": return "Maximum reasoning with automatic task delegation";
-  }
 }

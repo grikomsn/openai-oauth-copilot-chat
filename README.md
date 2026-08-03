@@ -18,17 +18,25 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 ## Features
 
 - ChatGPT OAuth with PKCE and automatic access-token refresh
-- Current GPT and Codex model families in Copilot Chat's model picker
+- Models discovered from the live Codex catalog for the signed-in ChatGPT account
 - Streaming responses, reasoning summaries, images, and tool calling
-- Normal/Fast speed and model-specific reasoning effort in one reliable model-picker control
+- Separate Fast model entries plus model-specific reasoning effort controls
 - Native Copilot context-window accounting from Codex inference token usage
 - Status-bar indicator for five-hour/weekly ChatGPT Codex quota and locally tracked tokens
 - Browser callback, manual callback, and optional Codex CLI session import
 - Connection test and privacy-safe diagnostics commands
 
-The current model picker exposes GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna,
-GPT-5.5, and GPT-5.2. Model-specific reasoning efforts and Fast mode options
-follow the current Codex catalog; all five models accept image input.
+The model picker follows the live Codex catalog instead of a list bundled with the
+extension. Display names, descriptions, context windows, image/tool capabilities,
+reasoning efforts, and Fast availability are derived from the signed-in account's
+catalog response. Models that advertise the `fast` additional speed tier also appear as a
+separate **Fast** model entry.
+
+Context limits follow Codex's own runtime policy: the catalog's effective-window
+percentage defines the usable hard window, while its auto-compaction threshold defines
+the input budget. The remaining headroom is reported to VS Code as the output budget so
+Copilot Chat displays the same total context limit instead of adding an unrelated output
+allowance.
 
 ## Requirements
 
@@ -43,7 +51,8 @@ follow the current Codex catalog; all five models accept image input.
 3. Choose **Sign in with ChatGPT** and complete the browser flow.
 4. In Copilot Chat, open the model picker, choose **Manage Models**, enable **Codex Bridge**, and select a Codex model.
 
-Models contributed by this extension include an **(OAuth)** suffix so they remain distinguishable from models contributed by other installed OpenAI extensions.
+Catalog names are normalized for the picker by replacing hyphens with spaces and
+replacing `GPT` with `Codex`.
 
 If another process uses local port `1455`, choose **Sign in manually**. If the Codex CLI is already signed in, **Import Codex CLI Session** can copy its OAuth session from `~/.codex/auth.json` into VS Code Secret Storage.
 
@@ -61,10 +70,13 @@ If another process uses local port `1455`, choose **Sign in manually**. If the C
 
 ## Settings
 
-- `openaiCodex.speedMode`: independent workspace default, `normal` or `fast` (Fast uses more account capacity and is shown only for supported models)
-- `openaiCodex.reasoningEffort`: independent workspace default; supported values range from `low` through `ultra` by model
+- `openaiCodex.reasoningSummary`: workspace default for reasoning summaries; choose `auto`, `concise`, `detailed`, or `none`, while `model` follows the live catalog default
 
-Copilot Chat exposes one compact per-model menu, so request overrides appear as combinations such as **Normal · Medium** and **Fast · High**.
+Each model defaults to the catalog's `default_reasoning_level` and exposes only the
+reasoning efforts advertised by that catalog. Fast
+processing is selected through the separate model entry and uses more account capacity.
+Models that accept `reasoning.summary` also expose a per-model summary control; that
+selection overrides the workspace default.
 
 - `openaiCodex.requestTimeoutSeconds`: total request timeout
 - `openaiCodex.debugLogging`: request metadata only; prompts and tokens are never logged

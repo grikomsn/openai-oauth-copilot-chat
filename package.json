@@ -69,31 +69,24 @@
     "configuration": {
       "title": "Codex Bridge for Copilot Chat",
       "properties": {
-        "openaiCodex.reasoningEffort": {
+        "openaiCodex.reasoningSummary": {
           "type": "string",
           "enum": [
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max",
-            "ultra"
+            "model",
+            "auto",
+            "concise",
+            "detailed",
+            "none"
           ],
-          "default": "high",
-          "description": "Default reasoning effort sent to Codex. A model-picker selection overrides this value; unsupported high-effort requests automatically retry with high."
-        },
-        "openaiCodex.speedMode": {
-          "type": "string",
-          "enum": [
-            "normal",
-            "fast"
-          ],
-          "default": "normal",
+          "default": "auto",
           "enumDescriptions": [
-            "Standard speed and usage",
-            "1.5x speed with increased usage on supported models"
+            "Use the default advertised by the live model catalog",
+            "Let Codex choose the summary detail",
+            "Return a concise reasoning summary",
+            "Return a detailed reasoning summary",
+            "Do not request a reasoning summary"
           ],
-          "description": "Default Codex processing speed. A model-picker selection overrides this value."
+          "description": "Default reasoning summary detail sent to Codex. A model-picker selection overrides this value; models that do not accept the reasoning.summary parameter ignore it."
         },
         "openaiCodex.requestTimeoutSeconds": {
           "type": "number",

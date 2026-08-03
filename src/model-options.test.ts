@@ -4,69 +4,86 @@ import {
   applyModelRequestOptions,
   buildModelConfigurationSchema,
   resolveModelRequestOptions,
+  type ModelOptionSpec,
 } from "./model-options";
 
-test("per-request speed and effort override workspace defaults", () => {
+const spec: ModelOptionSpec = {
+  efforts: ["medium", "adaptive"],
+  descriptions: {
+    medium: "Balanced reasoning",
+    adaptive: "Let the model choose",
+  },
+  defaultEffort: "medium",
+  supportsReasoningSummaryParameter: true,
+  defaultReasoningSummary: "auto",
+};
+
+test("resolves picker options and applies them to a Fast request", () => {
   const options = resolveModelRequestOptions(
-    "gpt-5.6-sol",
-    { speedMode: "fast", reasoningEffort: "ultra" },
-    { speedMode: "normal", reasoningEffort: "low" },
+    spec,
+    { reasoningEffort: "adaptive", reasoningSummary: "detailed" },
+    { reasoningSummary: "concise" },
+    "fast",
   );
-  assert.deepEqual(options, { speedMode: "fast", reasoningEffort: "ultra" });
+
+  assert.deepEqual(options, {
+    speedMode: "fast",
+    reasoningEffort: "adaptive",
+    reasoningSummary: "detailed",
+  });
   assert.deepEqual(applyModelRequestOptions({ model: "gpt-5.6-sol" }, options), {
     model: "gpt-5.6-sol",
-    reasoning: { effort: "ultra", summary: "auto" },
+    reasoning: { effort: "adaptive", summary: "detailed" },
     service_tier: "priority",
   });
 });
 
-test("combined model-picker mode overrides both workspace defaults", () => {
+test("falls back to live model defaults and reads legacy picker values", () => {
   assert.deepEqual(
     resolveModelRequestOptions(
-      "gpt-5.6-sol",
-      { mode: "fast:max" },
-      { speedMode: "normal", reasoningEffort: "low" },
+      spec,
+      { reasoningEffort: "unsupported" },
+      { reasoningEffort: "adaptive", reasoningSummary: "model" },
+      "normal",
     ),
-    { speedMode: "fast", reasoningEffort: "max" },
+    { speedMode: "normal", reasoningEffort: "medium", reasoningSummary: "auto" },
+  );
+  assert.equal(
+    resolveModelRequestOptions(spec, { mode: "fast:adaptive" }, {}, "normal").reasoningEffort,
+    "adaptive",
   );
 });
 
-test("normal mode omits service_tier", () => {
-  const body = applyModelRequestOptions(
-    { model: "gpt-5.6-terra" },
-    { speedMode: "normal", reasoningEffort: "medium" },
-  );
-  assert.equal("service_tier" in body, false);
-});
-
-test("unsupported fast mode and effort safely fall back per model", () => {
-  assert.deepEqual(
-    resolveModelRequestOptions(
-      "gpt-5.2",
-      { speedMode: "fast", reasoningEffort: "ultra" },
-      {},
-    ),
-    { speedMode: "normal", reasoningEffort: "medium" },
-  );
-});
-
-test("configuration schema exposes every speed and effort combination in one host-visible control", () => {
-  const fastSchema = buildModelConfigurationSchema("gpt-5.6-sol");
-  assert.deepEqual(fastSchema.properties.mode.enum, [
-    "normal:low", "normal:medium", "normal:high", "normal:xhigh", "normal:max", "normal:ultra",
-    "fast:low", "fast:medium", "fast:high", "fast:xhigh", "fast:max", "fast:ultra",
-  ]);
-
-  const normalOnlySchema = buildModelConfigurationSchema("gpt-5.2");
-  assert.deepEqual(normalOnlySchema.properties.mode.enum, [
-    "normal:low", "normal:medium", "normal:high", "normal:xhigh",
-  ]);
-});
-
-test("workspace defaults are reflected in the picker schema", () => {
-  const schema = buildModelConfigurationSchema("gpt-5.6-sol", {
-    speedMode: "fast",
-    reasoningEffort: "max",
+test("builds picker controls from the live model metadata", () => {
+  const schema = buildModelConfigurationSchema(spec, {
+    speedMode: "normal",
+    reasoningEffort: "adaptive",
+    reasoningSummary: "concise",
   });
-  assert.equal(schema.properties.mode.default, "fast:max");
+
+  assert.deepEqual(schema.properties.reasoningEffort.enum, ["medium", "adaptive"]);
+  assert.deepEqual(schema.properties.reasoningEffort.enumDescriptions, [
+    "Balanced reasoning",
+    "Let the model choose",
+  ]);
+  assert.equal(schema.properties.reasoningEffort.default, "adaptive");
+  assert.equal(schema.properties.reasoningSummary.default, "concise");
+
+  const unsupported = buildModelConfigurationSchema({
+    ...spec,
+    supportsReasoningSummaryParameter: false,
+  });
+  assert.equal("reasoningSummary" in unsupported.properties, false);
+});
+
+test("omits reasoning summaries when disabled or unsupported", () => {
+  const disabled = resolveModelRequestOptions(spec, { reasoningSummary: "none" }, {}, "normal");
+  assert.deepEqual(applyModelRequestOptions({}, disabled), {
+    reasoning: { effort: "medium" },
+  });
+
+  const detailed = resolveModelRequestOptions(spec, { reasoningSummary: "detailed" }, {}, "normal");
+  assert.deepEqual(applyModelRequestOptions({}, detailed, false), {
+    reasoning: { effort: "medium" },
+  });
 });

@@ -198,10 +198,9 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     const timeout = setTimeout(() => controller.abort(), Math.max(10, configuration().get("requestTimeoutSeconds", 600)) * 1000);
     const listener = cancellation.onCancellationRequested(() => controller.abort());
     const promptCacheKey = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : undefined;
-    const fallbackSessionId = randomUUID();
     const transportHeaders = promptCacheKey
       ? createPromptCacheTransportHeaders(promptCacheKey)
-      : { "session-id": fallbackSessionId, "thread-id": fallbackSessionId };
+      : { "session-id": randomUUID(), "thread-id": randomUUID() };
     try {
       return await fetch(CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",

@@ -250,52 +250,9 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     cancellation: vscode.CancellationToken,
   ): Promise<Response> {
     const promptCacheKey = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : undefined;
-    const fallbackSessionId = randomUUID();
     const transportHeaders = promptCacheKey
       ? createPromptCacheTransportHeaders(promptCacheKey)
-      : { "session-id": fallbackSessionId, "thread-id": fallbackSessionId };
-    return this.fetchWithCancellation(CHATGPT_CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        ...this.authHeaders(credentials, "text/event-stream"),
-        "Content-Type": "application/json",
-        Originator: OAUTH_ORIGINATOR,
-        ...transportHeaders,
-      },
-      body: JSON.stringify(body),
-    }, cancellation);
-  }
-
-  private async sendWithAuthRetry(
-    request: (credentials: OAuthCredentials) => Promise<Response>,
-  ): Promise<Response> {
-    let response = await request(await this.oauth.getAccessToken());
-    if (response.status === 401) {
-      // Refresh once for an expired token, but avoid retry loops on a persistent authorization failure.
-      response = await request(await this.oauth.getAccessToken(true));
-    }
-    return response;
-  }
-
-  private authHeaders(credentials: OAuthCredentials, accept: string): Record<string, string> {
-    return {
-      Authorization: `Bearer ${credentials.token}`,
-      Accept: accept,
-      "User-Agent": this.userAgent,
-      ...(credentials.accountId ? { "ChatGPT-Account-ID": credentials.accountId } : {}),
-    };
-  }
-
-  private async fetchWithCancellation(
-    url: string,
-    init: RequestInit,
-    cancellation: vscode.CancellationToken,
-  ): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutSeconds = Math.max(10, configuration().get("requestTimeoutSeconds", 600));
-    const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
-    const listener = cancellation.onCancellationRequested(() => controller.abort());
-    if (cancellation.isCancellationRequested) controller.abort();
+      : { "session-id": randomUUID(), "thread-id": randomUUID() };
     try {
       // Timeout and VS Code cancellation share one signal so every network path tears down consistently.
       return await this.fetcher(url, { ...init, signal: controller.signal });

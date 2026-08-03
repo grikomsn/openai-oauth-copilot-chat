@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export interface PromptCacheContext {
   model: string;
@@ -17,7 +17,7 @@ export interface PromptCacheTransportHeaders {
   "thread-id": string;
 }
 
-export function createPromptCacheSessionId(promptCacheKey: string): string {
+export function createPromptCacheAffinitySessionId(promptCacheKey: string): string {
   const hash = createHash("sha256").update(`prompt-cache-session:v1:${promptCacheKey}`).digest("hex");
   const versioned = `${hash.slice(0, 12)}5${hash.slice(13, 16)}`;
   const variant = `${((Number.parseInt(hash[16], 16) & 0x3) | 0x8).toString(16)}${hash.slice(17, 20)}`;
@@ -25,8 +25,10 @@ export function createPromptCacheSessionId(promptCacheKey: string): string {
 }
 
 export function createPromptCacheTransportHeaders(promptCacheKey: string): PromptCacheTransportHeaders {
-  const sessionId = createPromptCacheSessionId(promptCacheKey);
-  return { "session-id": sessionId, "thread-id": sessionId };
+  return {
+    "session-id": createPromptCacheAffinitySessionId(promptCacheKey),
+    "thread-id": randomUUID(),
+  };
 }
 
 export function createPromptCacheKey(context: PromptCacheContext): string {

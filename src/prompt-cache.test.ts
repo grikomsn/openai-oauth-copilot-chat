@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildPromptCacheRequestFields,
+  createPromptCacheAffinitySessionId,
   createPromptCacheKey,
-  createPromptCacheSessionId,
   createPromptCacheTransportHeaders,
   type PromptCacheContext,
 } from "./prompt-cache";
@@ -84,24 +84,29 @@ test("builds transport-ready cache fields without changing model input", () => {
   assert.equal(fields.prompt_cache_key, createPromptCacheKey(request));
 });
 
-test("derives a stable privacy-safe session UUID from the cache key", () => {
-  const cacheKey = createPromptCacheKey(context([userMessage("Explain this code")]));
-  const sessionId = createPromptCacheSessionId(cacheKey);
+const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 
-  assert.equal(createPromptCacheSessionId(cacheKey), sessionId);
+test("derives a stable privacy-safe cache-affinity session UUID", () => {
+  const cacheKey = createPromptCacheKey(context([userMessage("Explain this code")]));
+  const sessionId = createPromptCacheAffinitySessionId(cacheKey);
+
+  assert.equal(createPromptCacheAffinitySessionId(cacheKey), sessionId);
   assert.match(sessionId, /^[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.notEqual(
-    createPromptCacheSessionId(createPromptCacheKey(context([userMessage("Write a new test")]))),
+    createPromptCacheAffinitySessionId(createPromptCacheKey(context([userMessage("Write a new test")]))),
     sessionId,
   );
 });
 
-test("uses the stable cache identity for Codex session and thread headers", () => {
-  const cacheKey = createPromptCacheKey(context([userMessage("Explain this code")]));
-  const sessionId = createPromptCacheSessionId(cacheKey);
+test("does not reuse thread identity between conversations with the same cache prefix", () => {
+  const firstCacheKey = createPromptCacheKey(context([userMessage("Explain this code")]));
+  const secondCacheKey = createPromptCacheKey(context([userMessage("Explain this code")]));
+  const first = createPromptCacheTransportHeaders(firstCacheKey);
+  const second = createPromptCacheTransportHeaders(secondCacheKey);
 
-  assert.deepEqual(createPromptCacheTransportHeaders(cacheKey), {
-    "session-id": sessionId,
-    "thread-id": sessionId,
-  });
+  assert.equal(first["session-id"], createPromptCacheAffinitySessionId(firstCacheKey));
+  assert.equal(second["session-id"], first["session-id"]);
+  assert.match(first["thread-id"], uuidPattern);
+  assert.match(second["thread-id"], uuidPattern);
+  assert.notEqual(second["thread-id"], first["thread-id"]);
 });

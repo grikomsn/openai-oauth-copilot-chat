@@ -22,6 +22,7 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 - Streaming responses, reasoning summaries, images, and tool calling
 - Normal/Fast speed and model-specific reasoning effort in one reliable model-picker control
 - Native Copilot context-window accounting from Codex inference token usage
+- Automatic OpenAI prompt-cache reuse for eligible prefixes across normal chat turns and agent tool loops
 - Status-bar indicator for five-hour/weekly ChatGPT Codex quota and locally tracked tokens
 - Browser callback, manual callback, and optional Codex CLI session import
 - Connection test and privacy-safe diagnostics commands

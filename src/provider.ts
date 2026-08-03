@@ -9,6 +9,7 @@ import {
 } from "./model-options";
 import { CODEX_MODELS } from "./model-catalog";
 import { OpenAIOAuth } from "./oauth";
+import { buildPromptCacheRequestFields, createPromptCacheTransportHeaders } from "./prompt-cache";
 import {
   CHATGPT_CODEX_RESPONSES_URL,
   CHATGPT_CODEX_USAGE_URL,
@@ -196,7 +197,11 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.max(10, configuration().get("requestTimeoutSeconds", 600)) * 1000);
     const listener = cancellation.onCancellationRequested(() => controller.abort());
-    const sessionId = randomUUID();
+    const promptCacheKey = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : undefined;
+    const fallbackSessionId = randomUUID();
+    const transportHeaders = promptCacheKey
+      ? createPromptCacheTransportHeaders(promptCacheKey)
+      : { "session-id": fallbackSessionId, "thread-id": fallbackSessionId };
     try {
       return await fetch(CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
@@ -206,11 +211,10 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
           Accept: "text/event-stream",
           "User-Agent": this.userAgent,
           Originator: OAUTH_ORIGINATOR,
-          Session_id: sessionId,
-          Conversation_id: sessionId,
+          ...transportHeaders,
           ...(credentials.accountId ? { "Chatgpt-Account-Id": credentials.accountId } : {}),
         },
-        body: JSON.stringify({ ...body, prompt_cache_key: sessionId }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
     } finally {
@@ -248,11 +252,20 @@ function buildRequest(
     parameters: tool.inputSchema && typeof tool.inputSchema === "object" ? tool.inputSchema : { type: "object", properties: {} },
     strict: false,
   }));
-  const input = messages.flatMap(convertMessage);
+  const convertedInput = messages.flatMap(convertMessage);
+  const input = convertedInput.length
+    ? convertedInput
+    : [{ type: "message", role: "user", content: [{ type: "input_text", text: "" }] }];
+  const promptCache = buildPromptCacheRequestFields({
+    model,
+    instructions: DEFAULT_INSTRUCTIONS,
+    tools,
+    input,
+  });
   return applyModelRequestOptions({
     model,
     instructions: DEFAULT_INSTRUCTIONS,
-    input: input.length ? input : [{ type: "message", role: "user", content: [{ type: "input_text", text: "" }] }],
+    ...promptCache,
     store: false,
     stream: true,
     include: ["reasoning.encrypted_content"],

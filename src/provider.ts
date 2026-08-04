@@ -1,3 +1,5 @@
+/** VS Code language-model adapter for the ChatGPT Codex backend. */
+
 import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
 import { messageOf, responseError } from "./errors";
@@ -34,6 +36,7 @@ import {
 
 const DEFAULT_INSTRUCTIONS = "You are OpenAI Codex, a coding agent in Visual Studio Code. Be concise, correct, and use the supplied tools when useful.";
 
+/** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
   rawModelId: string;
   speedMode: SpeedMode;

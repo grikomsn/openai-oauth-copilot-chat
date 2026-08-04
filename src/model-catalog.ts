@@ -1,13 +1,21 @@
+/** Model-directory types and normalization for the live Codex picker. */
+
+/** Processing speed requested for a model. */
 export type SpeedMode = "normal" | "fast";
+/** A model-advertised reasoning effort. */
 export type ReasoningEffort = string;
+/** Reasoning summary modes accepted by the Codex backend. */
 export const REASONING_SUMMARIES = ["auto", "concise", "detailed", "none"] as const;
+/** A supported reasoning summary mode. */
 export type ReasoningSummary = typeof REASONING_SUMMARIES[number];
 
+/** One reasoning level advertised by the model directory. */
 export interface CodexReasoningLevel {
   effort: ReasoningEffort;
   description: string;
 }
 
+/** Normalized metadata for a model exposed by the extension. */
 export interface CodexModelMetadata {
   id: string;
   name: string;
@@ -27,6 +35,7 @@ export interface CodexModelMetadata {
   priority: number;
 }
 
+/** A picker-ready model entry, including its selected speed mode. */
 export interface CodexModelVariant extends CodexModelMetadata {
   registrationId: string;
   rawModelId: string;

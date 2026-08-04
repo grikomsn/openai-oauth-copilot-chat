@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
+/** Privacy-safe prompt-cache identity and transport helpers. */
+
 /**
  * Stable request-prefix inputs used to derive a privacy-safe prompt-cache key.
  *

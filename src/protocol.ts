@@ -1,3 +1,5 @@
+/** Stable protocol identity and endpoint constants for this extension. */
+
 export const EXTENSION_DISPLAY_NAME = "Codex Bridge for Copilot Chat";
 export const EXTENSION_PRODUCT_ID = "openai-oauth-copilot-chat";
 export const OAUTH_ORIGINATOR = EXTENSION_PRODUCT_ID;

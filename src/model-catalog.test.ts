@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expandCodexModelVariants, parseCodexModelsPayload } from "./model-catalog";
+import { expandCodexModelVariants, formatCodexDisplayName, parseCodexModelsPayload } from "./model-catalog";
 
 test("maps the visible remote catalog metadata", () => {
   const models = parseCodexModelsPayload({
@@ -45,7 +45,7 @@ test("maps the visible remote catalog metadata", () => {
   })), [
     {
       id: "gpt-5.6-sol",
-      name: "GPT-5.6-Sol",
+      name: "GPT 5.6 Sol",
       image: true,
       efforts: ["low", "adaptive"],
       defaultEffort: "adaptive",
@@ -56,7 +56,7 @@ test("maps the visible remote catalog metadata", () => {
     },
     {
       id: "gpt-5.4-mini",
-      name: "GPT-5.4-Mini",
+      name: "GPT 5.4 Mini",
       image: false,
       efforts: ["medium"],
       defaultEffort: "medium",
@@ -104,7 +104,7 @@ test("skips models without selectable reasoning levels", () => {
   );
 });
 
-test("expands Fast models without changing their backend slug", () => {
+test("keeps Fast-capable models in one picker entry", () => {
   const [model] = parseCodexModelsPayload({ models: [remoteModel({
     slug: "gpt-5.6-terra",
     display_name: "GPT-5.6-Terra",
@@ -117,23 +117,21 @@ test("expands Fast models without changing their backend slug", () => {
     rawModelId: variant.rawModelId,
     name: variant.name,
     speedMode: variant.speedMode,
-    detail: variant.detail,
+    supportsFast: variant.supportsFast,
   })), [
     {
       registrationId: "gpt-5.6-terra",
       rawModelId: "gpt-5.6-terra",
-      name: "GPT-5.6-Terra",
+      name: "GPT 5.6 Terra",
       speedMode: "normal",
-      detail: undefined,
-    },
-    {
-      registrationId: "gpt-5.6-terra:fast",
-      rawModelId: "gpt-5.6-terra",
-      name: "GPT-5.6-Terra Fast",
-      speedMode: "fast",
-      detail: "Faster generation",
+      supportsFast: true,
     },
   ]);
+});
+
+test("prettifies catalog labels without replacing the product name", () => {
+  assert.equal(formatCodexDisplayName("GPT-5.6-Luna"), "GPT 5.6 Luna");
+  assert.equal(formatCodexDisplayName("Codex--Review"), "Codex Review");
 });
 
 test("maps default and advertised Codex context limits", () => {

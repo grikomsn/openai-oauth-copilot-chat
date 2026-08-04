@@ -116,7 +116,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    // Each refresh can change capabilities, defaults, and the presence of a Fast variant.
+    // Each refresh can change capabilities, defaults, and the available Speed Mode toggle.
     const models = expandCodexModelVariants(await this.fetchModels(token));
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
@@ -132,9 +132,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         maxInputTokens: model.input,
         maxOutputTokens: model.output,
         isUserSelectable: true,
-        // Use the registered variant for schema visibility; legacy workspace settings
-        // still resolve request defaults but must not hide the normal model's toggle.
-        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults, model.speedMode),
+        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),
         capabilities: { imageInput: model.image, toolCalling: model.toolCalling },
         speedMode: model.speedMode,
         optionSpec,

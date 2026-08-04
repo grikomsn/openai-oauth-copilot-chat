@@ -117,7 +117,6 @@ export function resolveModelRequestOptions(
 export function buildModelConfigurationSchema(
   spec: ModelOptionSpec,
   defaults?: ModelRequestOptions,
-  registeredSpeedMode?: SpeedMode,
 ): {
   type: "object";
   properties: Record<string, Record<string, unknown>>;
@@ -126,12 +125,10 @@ export function buildModelConfigurationSchema(
     ? defaults.reasoningEffort
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
-  // Fast variants remain available as stable picker entries, so only normal entries
-  // expose the toggle that can switch the request's service tier in place. VS Code
-  // renders one control per supported group, so keep Speed Mode separate from the
-  // navigation-group reasoning control to make both choices visible in the popup.
-  const fixedSpeedMode = registeredSpeedMode ?? defaults?.speedMode;
-  const exposesSpeedMode = spec.supportsFast && fixedSpeedMode !== "fast";
+  // Every Fast-capable model has one picker entry, so its Speed Mode toggle is
+  // always visible; legacy Fast defaults only choose the initial toggle value.
+  // Keep this in the tokens group because VS Code renders one control per group.
+  const exposesSpeedMode = spec.supportsFast;
   const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
   return {
     type: "object",
@@ -197,7 +194,7 @@ export function applyModelRequestOptions(
   options: ModelRequestOptions,
   supportsReasoningSummaryParameter = true,
 ): Record<string, unknown> {
-  // Omit unsupported/"none" summaries and only opt into the priority tier for Fast variants.
+  // Omit unsupported/"none" summaries and only opt into the priority tier for Fast mode.
   return {
     ...body,
     reasoning: {

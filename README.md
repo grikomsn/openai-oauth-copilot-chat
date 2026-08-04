@@ -20,7 +20,7 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 - ChatGPT OAuth with PKCE and automatic access-token refresh
 - Models discovered from the live Codex catalog for the signed-in ChatGPT account
 - Streaming responses, reasoning summaries, images, and tool calling
-- Separate Fast model entries plus per-model reasoning effort and Speed Mode controls
+- Per-model reasoning effort and Speed Mode controls
 - Native Copilot context-window accounting from Codex inference token usage
 - Automatic OpenAI prompt-cache reuse for eligible prefixes across normal chat turns and agent tool loops
 - Status-bar indicator for five-hour/weekly ChatGPT Codex quota and locally tracked tokens
@@ -30,8 +30,8 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 The model picker follows the live Codex catalog instead of a list bundled with the
 extension. Display names, descriptions, context windows, image/tool capabilities,
 reasoning efforts, and Fast availability are derived from the signed-in account's
-catalog response. Models that advertise the `fast` additional speed tier also appear as a
-separate **Fast** model entry.
+catalog response. Models that advertise the `fast` additional speed tier expose a native
+**Speed Mode** control on their normal model entry.
 
 Context limits follow Codex's own runtime policy: the catalog's effective-window
 percentage defines the usable hard window, while its auto-compaction threshold defines
@@ -52,10 +52,10 @@ allowance.
 3. Choose **Sign in with ChatGPT** and complete the browser flow.
 4. In Copilot Chat, open the model picker, choose **Manage Models**, enable **Codex Bridge**, and select a Codex model.
 
-Model names and descriptions come from the live catalog; Fast variants add a
-**Fast** suffix to the catalog name. Normal model entries also expose native
-Copilot Chat controls for the advertised reasoning effort and Speed Mode, so
-you can switch to the Fast service tier without changing model entries.
+Model names and descriptions come from the live catalog, with dashes in display labels
+formatted as spaces. Each model exposes native Copilot Chat controls for the advertised
+reasoning effort and, when supported, Speed Mode, so you can switch to the Fast service
+tier without adding a second model entry.
 
 If another process uses local port `1455`, choose **Sign in manually**. If the Codex CLI is already signed in, **Import Codex CLI Session** can copy its OAuth session from `~/.codex/auth.json` into VS Code Secret Storage.
 
@@ -78,8 +78,7 @@ If another process uses local port `1455`, choose **Sign in manually**. If the C
 
 Each model defaults to the catalog's `default_reasoning_level` and exposes only the
 reasoning efforts advertised by that catalog. Fast processing can be selected through
-the model's native **Speed Mode** control or the separate Fast model entry; it uses
-more account capacity.
+the model's native **Speed Mode** control; it uses more account capacity.
 Models that accept `reasoning.summary` also expose a per-model summary control; that
 selection overrides the workspace default.
 

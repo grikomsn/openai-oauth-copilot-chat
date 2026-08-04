@@ -115,20 +115,13 @@ test("builds picker controls from the live model metadata", () => {
   assert.equal(schema.properties.speedMode.default, "normal");
   assert.equal(schema.properties.reasoningSummary.default, "concise");
 
-  const fastVariantSchema = buildModelConfigurationSchema(spec, {
+  const legacyFastDefaultSchema = buildModelConfigurationSchema(spec, {
     speedMode: "fast",
     reasoningEffort: "adaptive",
     reasoningSummary: "concise",
   });
-  assert.equal("speedMode" in fastVariantSchema.properties, false);
-
-  const normalVariantWithFastFallback = buildModelConfigurationSchema(spec, {
-    speedMode: "fast",
-    reasoningEffort: "adaptive",
-    reasoningSummary: "concise",
-  }, "normal");
-  assert.deepEqual(normalVariantWithFastFallback.properties.speedMode.enum, ["normal", "fast"]);
-  assert.equal(normalVariantWithFastFallback.properties.speedMode.default, "fast");
+  assert.deepEqual(legacyFastDefaultSchema.properties.speedMode.enum, ["normal", "fast"]);
+  assert.equal(legacyFastDefaultSchema.properties.speedMode.default, "fast");
 
   const unsupported = buildModelConfigurationSchema({
     ...spec,

@@ -80,7 +80,8 @@
             "ultra"
           ],
           "default": "high",
-          "description": "Default reasoning effort sent to Codex. A model-picker selection overrides this value; unsupported high-effort requests automatically retry with high."
+          "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer the live model picker.",
+          "description": "Legacy default reasoning effort sent to Codex when no model-specific value is selected. Unsupported values fall back to the live model default."
         },
         "openaiCodex.speedMode": {
           "type": "string",
@@ -89,11 +90,31 @@
             "fast"
           ],
           "default": "normal",
+          "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer selecting a Normal or Fast model entry.",
           "enumDescriptions": [
             "Standard speed and usage",
             "1.5x speed with increased usage on supported models"
           ],
-          "description": "Default Codex processing speed. A model-picker selection overrides this value."
+          "description": "Legacy default Codex processing speed. The live catalog and model-specific selection remain authoritative."
+        },
+        "openaiCodex.reasoningSummary": {
+          "type": "string",
+          "enum": [
+            "model",
+            "auto",
+            "concise",
+            "detailed",
+            "none"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "Use the default advertised by the live model catalog",
+            "Let Codex choose the summary detail",
+            "Return a concise reasoning summary",
+            "Return a detailed reasoning summary",
+            "Do not request a reasoning summary"
+          ],
+          "description": "Default reasoning summary detail sent to Codex. A model-picker selection overrides this value; models that do not accept the reasoning.summary parameter ignore it."
         },
         "openaiCodex.requestTimeoutSeconds": {
           "type": "number",
@@ -128,6 +149,7 @@
     "test": "npm run compile && node --test \"out/**/*.test.js\"",
     "check": "npm test",
     "changeset": "changeset",
+    "update-codex-version": "node scripts/update-codex-version.mjs",
     "version": "changeset version",
     "release": "npm run check && vsce publish --skip-duplicate",
     "prepackage": "npm run check",

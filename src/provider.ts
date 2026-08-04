@@ -4,14 +4,23 @@ import { messageOf, responseError } from "./errors";
 import {
   applyModelRequestOptions,
   buildModelConfigurationSchema,
+  modelOptionSpec,
   resolveModelRequestOptions,
+  type ModelOptionSpec,
   type ModelRequestOptions,
+  type SpeedMode,
 } from "./model-options";
-import { CODEX_MODELS } from "./model-catalog";
+import {
+  expandCodexModelVariants,
+  parseCodexModelsPayload,
+  type CodexModelMetadata,
+} from "./model-catalog";
 import { OpenAIOAuth } from "./oauth";
 import {
+  CODEX_MODELS_CLIENT_VERSION,
   CHATGPT_CODEX_RESPONSES_URL,
   CHATGPT_CODEX_USAGE_URL,
+  chatgptCodexModelsUrl,
   OAUTH_ORIGINATOR,
 } from "./protocol";
 import { ResponsesStreamParser, type CodexStreamEvent } from "./sse";
@@ -26,10 +35,26 @@ const DEFAULT_INSTRUCTIONS = "You are OpenAI Codex, a coding agent in Visual Stu
 
 export interface CodexModel extends vscode.LanguageModelChatInformation {
   rawModelId: string;
+  speedMode: SpeedMode;
+  optionSpec: ModelOptionSpec;
+  supportsParallelToolCalls: boolean;
 }
 
 type InputItem = Record<string, unknown>;
+type OAuthCredentials = { token: string; accountId?: string };
 
+/**
+ * Adapts live ChatGPT Codex models and Responses API streams to VS Code Chat.
+ *
+ * @example
+ * ```ts
+ * const provider = new OpenAICodexProvider(oauth, output, userAgent);
+ * vscode.lm.registerLanguageModelChatProvider("openai-codex", provider);
+ * ```
+ *
+ * @see {@link CodexModel}
+ * @see {@link OpenAIOAuth}
+ */
 export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<CodexModel> {
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   private readonly usageEmitter = new vscode.EventEmitter<CodexUsageSnapshot>();
@@ -43,6 +68,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     private readonly output: vscode.OutputChannel,
     private readonly userAgent: string,
     initialUsage: CodexUsageSnapshot = {},
+    private readonly fetcher: typeof fetch = fetch,
   ) {
     this.usage = initialUsage;
   }
@@ -61,12 +87,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   async refreshUsage(): Promise<CodexUsageSnapshot> {
     try {
-      let credentials = await this.oauth.getAccessToken();
-      let response = await this.sendUsageRequest(credentials);
-      if (response.status === 401) {
-        credentials = await this.oauth.getAccessToken(true);
-        response = await this.sendUsageRequest(credentials);
-      }
+      const response = await this.sendWithAuthRetry((credentials) => this.sendUsageRequest(credentials));
       if (!response.ok) throw await responseError("Unable to refresh OpenAI Codex usage", response);
       this.lastQuotaFetchAt = Date.now();
       this.setUsage(mergeQuotaPayload(this.usage, await response.json(), this.lastQuotaFetchAt));
@@ -77,26 +98,44 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     }
   }
 
+  /**
+   * Loads and registers the current visible model catalog with VS Code.
+   *
+   * @example
+   * ```ts
+   * const models = await provider.provideLanguageModelChatInformation(options, token);
+   * console.log(models.map((model) => model.id));
+   * ```
+   *
+   * @see {@link parseCodexModelsPayload}
+   * @see {@link expandCodexModelVariants}
+   */
   async provideLanguageModelChatInformation(
     _options: vscode.PrepareLanguageModelChatModelOptions,
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    return CODEX_MODELS.map((model) => {
-      const defaults = resolveRequestOptions(model.id, undefined);
+    // Each refresh can change capabilities, defaults, and the presence of a Fast variant.
+    const models = expandCodexModelVariants(await this.fetchModels(token));
+    return models.map((model) => {
+      const optionSpec = modelOptionSpec(model);
+      const defaults = resolveRequestOptions(optionSpec, model.speedMode, undefined);
       return {
-        id: model.id,
-        rawModelId: model.id,
-        name: `${formatModelName(model.id)} (OAuth)`,
-        family: `openai-${model.id}`,
-        version: "1.0.0",
-        detail: "OpenAI Codex OAuth",
-        tooltip: `${model.id} through your ChatGPT subscription`,
+        id: model.registrationId,
+        rawModelId: model.rawModelId,
+        name: model.name,
+        family: model.rawModelId,
+        version: model.version,
+        detail: model.detail,
+        tooltip: model.description,
         maxInputTokens: model.input,
         maxOutputTokens: model.output,
         isUserSelectable: true,
-        configurationSchema: buildModelConfigurationSchema(model.id, defaults),
-        capabilities: { imageInput: model.image, toolCalling: true },
+        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),
+        capabilities: { imageInput: model.image, toolCalling: model.toolCalling },
+        speedMode: model.speedMode,
+        optionSpec,
+        supportsParallelToolCalls: model.supportsParallelToolCalls,
       };
     });
   }
@@ -108,23 +147,21 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     token: vscode.CancellationToken,
   ): Promise<void> {
-    const requestOptions = resolveRequestOptions(model.rawModelId, options.modelConfiguration);
-    const body = buildRequest(model.rawModelId, messages, options, requestOptions);
-    let credentials = await this.oauth.getAccessToken();
-    let response = await this.sendRequest(credentials, body, token);
-    if (response.status === 401) {
-      credentials = await this.oauth.getAccessToken(true);
-      response = await this.sendRequest(credentials, body, token);
-    }
-    if (response.status === 400 && ["xhigh", "max", "ultra"].includes(requestOptions.reasoningEffort)) {
-      this.output.appendLine(`[request] ${model.rawModelId} rejected ${requestOptions.reasoningEffort}; retrying with high`);
-      response = await this.sendRequest(credentials, { ...body, reasoning: { effort: "high", summary: "auto" } }, token);
-    }
+    const requestOptions = resolveRequestOptions(model.optionSpec, model.speedMode, options.modelConfiguration);
+    const body = buildRequest(
+      model.rawModelId,
+      messages,
+      options,
+      requestOptions,
+      model.supportsParallelToolCalls,
+      model.optionSpec.supportsReasoningSummaryParameter,
+    );
+    const response = await this.sendWithAuthRetry((credentials) => this.sendRequest(credentials, body, token));
     if (!response.ok) throw await responseError(`OpenAI Codex request failed for ${model.rawModelId}`, response);
     if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
 
     if (configuration().get("debugLogging", false)) {
-      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} initiator=${options.requestInitiator ?? "unknown"}`);
+      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} initiator=${options.requestInitiator ?? "unknown"}`);
     }
     await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId));
     if (Date.now() - this.lastQuotaFetchAt > 60_000) {
@@ -141,36 +178,54 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     return Math.max(1, Math.ceil(text.length / 4));
   }
 
-  async testConnection(): Promise<{ model: string; text: string; speedMode: string; reasoningEffort: string }> {
-    const model = CODEX_MODELS[0].id;
-    const requestOptions = resolveRequestOptions(model, undefined);
-    const credentials = await this.oauth.getAccessToken();
-    const body = applyModelRequestOptions({
-      model,
-      instructions: "Follow the user's instruction exactly.",
-      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Reply with exactly: OpenAI Codex connection verified" }] }],
-      store: false,
-      stream: true,
-      include: ["reasoning.encrypted_content"],
-    }, requestOptions);
-    const response = await this.sendRequest(credentials, body, new vscode.CancellationTokenSource().token);
-    if (!response.ok) throw await responseError("OpenAI Codex connection test failed", response);
-    if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
-    const text: string[] = [];
-    await consumeStream(response.body, { report: (part) => {
-      if (part instanceof vscode.LanguageModelTextPart) text.push(part.value);
-    } }, new vscode.CancellationTokenSource().token, (usage) => this.captureRequestUsage(usage, model));
-    return { model, text: text.join("").trim() || "(empty response)", ...requestOptions };
+  async testConnection(): Promise<{ model: string; text: string; speedMode: string; reasoningEffort: string; reasoningSummary: string }> {
+    const cancellation = new vscode.CancellationTokenSource();
+    try {
+      const model = (await this.fetchModels(cancellation.token))[0];
+      const requestOptions = resolveRequestOptions(modelOptionSpec(model), "normal", undefined);
+      const body = applyModelRequestOptions({
+        model: model.id,
+        instructions: "Follow the user's instruction exactly.",
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Reply with exactly: OpenAI Codex connection verified" }] }],
+        store: false,
+        stream: true,
+        include: ["reasoning.encrypted_content"],
+      }, requestOptions, model.supportsReasoningSummaryParameter);
+      const response = await this.sendWithAuthRetry((credentials) => this.sendRequest(credentials, body, cancellation.token));
+      if (!response.ok) throw await responseError("OpenAI Codex connection test failed", response);
+      if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
+      const text: string[] = [];
+      await consumeStream(response.body, { report: (part) => {
+        if (part instanceof vscode.LanguageModelTextPart) text.push(part.value);
+      } }, cancellation.token, (usage) => this.captureRequestUsage(usage, model.id));
+      return { model: model.id, text: text.join("").trim() || "(empty response)", ...requestOptions };
+    } finally {
+      cancellation.dispose();
+    }
   }
 
-  private async sendUsageRequest(credentials: { token: string; accountId?: string }): Promise<Response> {
-    return fetch(CHATGPT_CODEX_USAGE_URL, {
+  private async fetchModels(cancellation: vscode.CancellationToken): Promise<CodexModelMetadata[]> {
+    const response = await this.sendWithAuthRetry((credentials) => this.sendModelsRequest(credentials, cancellation));
+    if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
+    return parseCodexModelsPayload(await response.json());
+  }
+
+  private sendModelsRequest(
+    credentials: OAuthCredentials,
+    cancellation: vscode.CancellationToken,
+  ): Promise<Response> {
+    return this.fetchWithCancellation(chatgptCodexModelsUrl(CODEX_MODELS_CLIENT_VERSION), {
       headers: {
-        Authorization: `Bearer ${credentials.token}`,
-        Accept: "application/json",
-        "User-Agent": this.userAgent,
-        ...(credentials.accountId ? { "Chatgpt-Account-Id": credentials.accountId } : {}),
+        ...this.authHeaders(credentials, "application/json"),
+        Originator: OAUTH_ORIGINATOR,
+        Version: CODEX_MODELS_CLIENT_VERSION,
       },
+    }, cancellation);
+  }
+
+  private sendUsageRequest(credentials: OAuthCredentials): Promise<Response> {
+    return this.fetcher(CHATGPT_CODEX_USAGE_URL, {
+      headers: this.authHeaders(credentials, "application/json"),
     });
   }
 
@@ -188,31 +243,58 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     this.usageEmitter.fire(usage);
   }
 
-  private async sendRequest(
-    credentials: { token: string; accountId?: string },
+  private sendRequest(
+    credentials: OAuthCredentials,
     body: Record<string, unknown>,
     cancellation: vscode.CancellationToken,
   ): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.max(10, configuration().get("requestTimeoutSeconds", 600)) * 1000);
-    const listener = cancellation.onCancellationRequested(() => controller.abort());
     const sessionId = randomUUID();
+    return this.fetchWithCancellation(CHATGPT_CODEX_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        ...this.authHeaders(credentials, "text/event-stream"),
+        "Content-Type": "application/json",
+        Originator: OAUTH_ORIGINATOR,
+        Session_id: sessionId,
+        Conversation_id: sessionId,
+      },
+      body: JSON.stringify({ ...body, prompt_cache_key: sessionId }),
+    }, cancellation);
+  }
+
+  private async sendWithAuthRetry(
+    request: (credentials: OAuthCredentials) => Promise<Response>,
+  ): Promise<Response> {
+    let response = await request(await this.oauth.getAccessToken());
+    if (response.status === 401) {
+      // Refresh once for an expired token, but avoid retry loops on a persistent authorization failure.
+      response = await request(await this.oauth.getAccessToken(true));
+    }
+    return response;
+  }
+
+  private authHeaders(credentials: OAuthCredentials, accept: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${credentials.token}`,
+      Accept: accept,
+      "User-Agent": this.userAgent,
+      ...(credentials.accountId ? { "ChatGPT-Account-ID": credentials.accountId } : {}),
+    };
+  }
+
+  private async fetchWithCancellation(
+    url: string,
+    init: RequestInit,
+    cancellation: vscode.CancellationToken,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutSeconds = Math.max(10, configuration().get("requestTimeoutSeconds", 600));
+    const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+    const listener = cancellation.onCancellationRequested(() => controller.abort());
+    if (cancellation.isCancellationRequested) controller.abort();
     try {
-      return await fetch(CHATGPT_CODEX_RESPONSES_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${credentials.token}`,
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          "User-Agent": this.userAgent,
-          Originator: OAUTH_ORIGINATOR,
-          Session_id: sessionId,
-          Conversation_id: sessionId,
-          ...(credentials.accountId ? { "Chatgpt-Account-Id": credentials.accountId } : {}),
-        },
-        body: JSON.stringify({ ...body, prompt_cache_key: sessionId }),
-        signal: controller.signal,
-      });
+      // Timeout and VS Code cancellation share one signal so every network path tears down consistently.
+      return await this.fetcher(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timeout);
       listener.dispose();
@@ -225,14 +307,33 @@ function configuration(): vscode.WorkspaceConfiguration {
 }
 
 function resolveRequestOptions(
-  modelId: string,
+  spec: ModelOptionSpec,
+  speedMode: SpeedMode,
   requestConfiguration: Readonly<Record<string, unknown>> | undefined,
 ): ModelRequestOptions {
   const config = configuration();
-  return resolveModelRequestOptions(modelId, requestConfiguration, {
-    speedMode: config.get("speedMode", "normal"),
-    reasoningEffort: config.get("reasoningEffort", "high"),
-  });
+  // Keep legacy settings as fallbacks without overriding per-model picker configuration.
+  const workspaceDefaults: Record<string, unknown> = {
+    reasoningSummary: config.get("reasoningSummary", "auto"),
+  };
+  const legacyReasoningEffort = explicitConfigurationValue<string>(config, "reasoningEffort");
+  if (legacyReasoningEffort !== undefined) workspaceDefaults.reasoningEffort = legacyReasoningEffort;
+  const legacySpeedMode = explicitConfigurationValue<string>(config, "speedMode");
+  if (legacySpeedMode !== undefined) workspaceDefaults.speedMode = legacySpeedMode;
+  return resolveModelRequestOptions(spec, requestConfiguration, {
+    ...workspaceDefaults,
+  }, speedMode);
+}
+
+function explicitConfigurationValue<T>(config: vscode.WorkspaceConfiguration, key: string): T | undefined {
+  const inspected = config.inspect<T>(key);
+  // Prefer the most specific configured scope, matching VS Code's effective-value precedence.
+  return inspected?.workspaceFolderLanguageValue
+    ?? inspected?.workspaceLanguageValue
+    ?? inspected?.workspaceFolderValue
+    ?? inspected?.workspaceValue
+    ?? inspected?.globalLanguageValue
+    ?? inspected?.globalValue;
 }
 
 function buildRequest(
@@ -240,6 +341,8 @@ function buildRequest(
   messages: readonly vscode.LanguageModelChatRequestMessage[],
   options: vscode.ProvideLanguageModelChatResponseOptions,
   requestOptions: ModelRequestOptions,
+  supportsParallelToolCalls: boolean,
+  supportsReasoningSummaryParameter: boolean,
 ): Record<string, unknown> {
   const tools = (options.tools ?? []).map((tool) => ({
     type: "function",
@@ -259,9 +362,9 @@ function buildRequest(
     ...(tools.length ? {
       tools,
       tool_choice: options.toolMode === vscode.LanguageModelChatToolMode.Required ? "required" : "auto",
-      parallel_tool_calls: true,
+      parallel_tool_calls: supportsParallelToolCalls,
     } : {}),
-  }, requestOptions);
+  }, requestOptions, supportsReasoningSummaryParameter);
 }
 
 function convertMessage(message: vscode.LanguageModelChatRequestMessage): InputItem[] {
@@ -354,8 +457,4 @@ function partText(part: vscode.LanguageModelInputPart | unknown): string {
   if (part instanceof vscode.LanguageModelToolCallPart) return JSON.stringify(part.input ?? {});
   if (part instanceof vscode.LanguageModelToolResultPart) return part.content.map(partText).join("\n");
   return typeof part === "string" ? part : "";
-}
-
-function formatModelName(id: string): string {
-  return id.split("-").map((part) => part === "gpt" ? "GPT" : part === "codex" ? "Codex" : part === "sol" ? "Sol" : part === "terra" ? "Terra" : part === "luna" ? "Luna" : part === "spark" ? "Spark" : part).join(" ");
 }

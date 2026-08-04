@@ -21,6 +21,11 @@ npm run watch
 npm run package
 ```
 
+The checked-in Codex client version is updated manually from the official Codex
+releases API. When a new release is needed, run `npm run update-codex-version`,
+review the source diff, and then run the normal checks. Compilation and watch mode
+do not contact GitHub.
+
 For local debugging, open this folder in VS Code and run **Run Codex Bridge Extension** from the Run and Debug view (or press F5) to launch an Extension Development Host. Authentication and live connection testing must be performed in that host.
 
 Install a local build with:

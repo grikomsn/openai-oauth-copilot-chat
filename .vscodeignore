@@ -9,6 +9,7 @@ CONTRIBUTING.md
 SECURITY.md
 AGENTS.md
 src/**
+scripts/**
 tsconfig.json
 package-lock.json
 out/**/*.test.*

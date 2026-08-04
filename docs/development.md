@@ -8,7 +8,7 @@ The extension has three small layers:
 - `provider.ts` translates VS Code language-model messages and tools into stateless OpenAI Responses input items.
 - `sse.ts` incrementally parses Responses API events into VS Code text, thinking, usage, and tool-call parts.
 
-Each implementation stays beside its focused `node:test` coverage in `src/`:
+The following implementations have focused colocated `node:test` coverage in `src/`:
 
 | Area | Implementation | Tests |
 | --- | --- | --- |

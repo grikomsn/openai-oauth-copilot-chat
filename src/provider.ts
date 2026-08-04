@@ -16,6 +16,7 @@ import {
   type CodexModelMetadata,
 } from "./model-catalog";
 import { OpenAIOAuth } from "./oauth";
+import { buildPromptCacheRequestFields, createPromptCacheTransportHeaders } from "./prompt-cache";
 import {
   CODEX_MODELS_CLIENT_VERSION,
   CHATGPT_CODEX_RESPONSES_URL,
@@ -248,17 +249,20 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     body: Record<string, unknown>,
     cancellation: vscode.CancellationToken,
   ): Promise<Response> {
-    const sessionId = randomUUID();
+    const promptCacheKey = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : undefined;
+    // Cache-aware requests share routing affinity; requests without a key still get isolated transport IDs.
+    const transportHeaders = promptCacheKey
+      ? createPromptCacheTransportHeaders(promptCacheKey)
+      : { "session-id": randomUUID(), "thread-id": randomUUID() };
     return this.fetchWithCancellation(CHATGPT_CODEX_RESPONSES_URL, {
       method: "POST",
       headers: {
         ...this.authHeaders(credentials, "text/event-stream"),
         "Content-Type": "application/json",
         Originator: OAUTH_ORIGINATOR,
-        Session_id: sessionId,
-        Conversation_id: sessionId,
+        ...transportHeaders,
       },
-      body: JSON.stringify({ ...body, prompt_cache_key: sessionId }),
+      body: JSON.stringify(body),
     }, cancellation);
   }
 
@@ -351,11 +355,20 @@ function buildRequest(
     parameters: tool.inputSchema && typeof tool.inputSchema === "object" ? tool.inputSchema : { type: "object", properties: {} },
     strict: false,
   }));
-  const input = messages.flatMap(convertMessage);
+  const convertedInput = messages.flatMap(convertMessage);
+  const input = convertedInput.length
+    ? convertedInput
+    : [{ type: "message", role: "user", content: [{ type: "input_text", text: "" }] }];
+  const promptCache = buildPromptCacheRequestFields({
+    model,
+    instructions: DEFAULT_INSTRUCTIONS,
+    tools,
+    input,
+  });
   return applyModelRequestOptions({
     model,
     instructions: DEFAULT_INSTRUCTIONS,
-    input: input.length ? input : [{ type: "message", role: "user", content: [{ type: "input_text", text: "" }] }],
+    ...promptCache,
     store: false,
     stream: true,
     include: ["reasoning.encrypted_content"],

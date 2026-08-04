@@ -20,7 +20,7 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 - ChatGPT OAuth with PKCE and automatic access-token refresh
 - Models discovered from the live Codex catalog for the signed-in ChatGPT account
 - Streaming responses, reasoning summaries, images, and tool calling
-- Separate Fast model entries plus model-specific reasoning effort controls
+- Separate Fast model entries plus per-model reasoning effort and Speed Mode controls
 - Native Copilot context-window accounting from Codex inference token usage
 - Automatic OpenAI prompt-cache reuse for eligible prefixes across normal chat turns and agent tool loops
 - Status-bar indicator for five-hour/weekly ChatGPT Codex quota and locally tracked tokens
@@ -53,7 +53,9 @@ allowance.
 4. In Copilot Chat, open the model picker, choose **Manage Models**, enable **Codex Bridge**, and select a Codex model.
 
 Model names and descriptions come from the live catalog; Fast variants add a
-**Fast** suffix to the catalog name.
+**Fast** suffix to the catalog name. Normal model entries also expose native
+Copilot Chat controls for the advertised reasoning effort and Speed Mode, so
+you can switch to the Fast service tier without changing model entries.
 
 If another process uses local port `1455`, choose **Sign in manually**. If the Codex CLI is already signed in, **Import Codex CLI Session** can copy its OAuth session from `~/.codex/auth.json` into VS Code Secret Storage.
 
@@ -75,8 +77,9 @@ If another process uses local port `1455`, choose **Sign in manually**. If the C
 - Legacy `openaiCodex.speedMode` and `openaiCodex.reasoningEffort` settings remain supported as workspace fallbacks for existing configurations. Prefer the live model picker for new selections.
 
 Each model defaults to the catalog's `default_reasoning_level` and exposes only the
-reasoning efforts advertised by that catalog. Fast
-processing is selected through the separate model entry and uses more account capacity.
+reasoning efforts advertised by that catalog. Fast processing can be selected through
+the model's native **Speed Mode** control or the separate Fast model entry; it uses
+more account capacity.
 Models that accept `reasoning.summary` also expose a per-model summary control; that
 selection overrides the workspace default.
 

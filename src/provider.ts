@@ -132,7 +132,9 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         maxInputTokens: model.input,
         maxOutputTokens: model.output,
         isUserSelectable: true,
-        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),
+        // Use the registered variant for schema visibility; legacy workspace settings
+        // still resolve request defaults but must not hide the normal model's toggle.
+        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults, model.speedMode),
         capabilities: { imageInput: model.image, toolCalling: model.toolCalling },
         speedMode: model.speedMode,
         optionSpec,

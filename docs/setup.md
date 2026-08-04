@@ -7,8 +7,9 @@ Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload
 Use **Codex Bridge: Manage Connection** to authenticate. After sign-in, open Copilot Chat's model picker and enable a model under **Manage Models → Codex Bridge**.
 
 Each model exposes the reasoning efforts advertised by the live Codex catalog. Models
-that advertise the `fast` additional speed tier also have a separate model entry ending in
-**Fast**. Choosing that entry requests faster processing with increased account usage.
+that advertise the `fast` additional speed tier expose a native **Speed Mode** control
+with Normal and Fast choices, and also retain a separate model entry ending in
+**Fast**. Either Fast choice requests faster processing with increased account usage.
 
 The `openaiCodex.reasoningSummary` setting controls the Responses API
 `reasoning.summary` value. `auto`, `concise`, and `detailed` request the corresponding

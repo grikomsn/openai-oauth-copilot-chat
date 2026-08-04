@@ -13,6 +13,7 @@ export interface ModelOptionSpec {
   descriptions: Readonly<Partial<Record<ReasoningEffort, string>>>;
   defaultEffort: ReasoningEffort;
   supportsFast: boolean;
+  fastDescription?: string;
   supportsReasoningSummaryParameter: boolean;
   defaultReasoningSummary: ReasoningSummary;
 }
@@ -38,7 +39,7 @@ export interface ModelRequestOptions {
 export function modelOptionSpec(
   model: Pick<
     CodexModelMetadata,
-    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
+    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "fastDescription" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
   >,
 ): ModelOptionSpec {
   return {
@@ -46,6 +47,7 @@ export function modelOptionSpec(
     descriptions: Object.fromEntries(model.reasoningLevels.map((level) => [level.effort, level.description])),
     defaultEffort: model.defaultReasoningEffort,
     supportsFast: model.supportsFast,
+    fastDescription: model.fastDescription,
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
     defaultReasoningSummary: model.defaultReasoningSummary,
   };
@@ -106,6 +108,7 @@ export function resolveModelRequestOptions(
  * ```ts
  * const schema = buildModelConfigurationSchema(spec, defaults);
  * console.log(schema.properties.reasoningEffort.enum);
+ * console.log(schema.properties.speedMode.enum);
  * ```
  *
  * @see {@link ModelOptionSpec}
@@ -114,6 +117,7 @@ export function resolveModelRequestOptions(
 export function buildModelConfigurationSchema(
   spec: ModelOptionSpec,
   defaults?: ModelRequestOptions,
+  registeredSpeedMode?: SpeedMode,
 ): {
   type: "object";
   properties: Record<string, Record<string, unknown>>;
@@ -122,6 +126,13 @@ export function buildModelConfigurationSchema(
     ? defaults.reasoningEffort
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
+  // Fast variants remain available as stable picker entries, so only normal entries
+  // expose the toggle that can switch the request's service tier in place. VS Code
+  // renders one control per supported group, so keep Speed Mode separate from the
+  // navigation-group reasoning control to make both choices visible in the popup.
+  const fixedSpeedMode = registeredSpeedMode ?? defaults?.speedMode;
+  const exposesSpeedMode = spec.supportsFast && fixedSpeedMode !== "fast";
+  const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
   return {
     type: "object",
     properties: {
@@ -134,6 +145,20 @@ export function buildModelConfigurationSchema(
         default: defaultEffort,
         group: "navigation",
       },
+      ...(exposesSpeedMode ? {
+        speedMode: {
+          type: "string",
+          title: "Speed Mode",
+          enum: ["normal", "fast"],
+          enumItemLabels: ["Normal", "Fast"],
+          enumDescriptions: [
+            "Standard speed and usage",
+            spec.fastDescription ?? "Faster generation with increased usage",
+          ],
+          default: defaultSpeedMode,
+          group: "tokens",
+        },
+      } : {}),
       ...(spec.supportsReasoningSummaryParameter ? {
         reasoningSummary: {
           type: "string",

@@ -23,6 +23,18 @@ export interface ModelRequestOptions {
   reasoningSummary: ReasoningSummary;
 }
 
+/**
+ * Projects live model metadata into the option specification used by VS Code.
+ *
+ * @example
+ * ```ts
+ * const spec = modelOptionSpec(model);
+ * console.log(spec.efforts, spec.supportsFast);
+ * ```
+ *
+ * @see {@link CodexModelMetadata}
+ * @see {@link resolveModelRequestOptions}
+ */
 export function modelOptionSpec(
   model: Pick<
     CodexModelMetadata,
@@ -39,6 +51,23 @@ export function modelOptionSpec(
   };
 }
 
+/**
+ * Resolves request and workspace settings against one live model's capabilities.
+ * Per-request settings take precedence over legacy and workspace fallbacks.
+ *
+ * @example
+ * ```ts
+ * const options = resolveModelRequestOptions(
+ *   spec,
+ *   { reasoningEffort: "high" },
+ *   { reasoningSummary: "concise" },
+ *   "normal",
+ * );
+ * ```
+ *
+ * @see {@link modelOptionSpec}
+ * @see {@link applyModelRequestOptions}
+ */
 export function resolveModelRequestOptions(
   spec: ModelOptionSpec,
   requestConfiguration: Readonly<Record<string, unknown>> | undefined,
@@ -46,6 +75,7 @@ export function resolveModelRequestOptions(
   speedMode: SpeedMode,
 ): ModelRequestOptions {
   const legacyMode = parseLegacyMode(stringOption(requestConfiguration, "mode"));
+  // Prefer request-specific values, then legacy picker values, workspace fallbacks, and live model defaults.
   const requestedEffort = parseConfiguredEffort(stringOption(requestConfiguration, "reasoningEffort"))
     ?? legacyMode?.reasoningEffort
     ?? parseConfiguredEffort(stringOption(workspaceDefaults, "reasoningEffort"));
@@ -54,6 +84,7 @@ export function resolveModelRequestOptions(
   const requestedSpeed = parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
     ?? legacyMode?.speedMode
     ?? parseConfiguredSpeed(stringOption(workspaceDefaults, "speedMode"));
+  // A registered Fast variant is authoritative; settings cannot turn it back into a normal request.
   return {
     reasoningEffort: requestedEffort && spec.efforts.includes(requestedEffort)
       ? requestedEffort
@@ -67,6 +98,19 @@ export function resolveModelRequestOptions(
   };
 }
 
+/**
+ * Builds the per-model configuration schema shown by the Copilot Chat picker.
+ * Unsupported reasoning-summary controls are intentionally omitted.
+ *
+ * @example
+ * ```ts
+ * const schema = buildModelConfigurationSchema(spec, defaults);
+ * console.log(schema.properties.reasoningEffort.enum);
+ * ```
+ *
+ * @see {@link ModelOptionSpec}
+ * @see {@link applyModelRequestOptions}
+ */
 export function buildModelConfigurationSchema(
   spec: ModelOptionSpec,
   defaults?: ModelRequestOptions,
@@ -110,11 +154,25 @@ export function buildModelConfigurationSchema(
   };
 }
 
+/**
+ * Applies resolved model options to a Responses API request body.
+ *
+ * @example
+ * ```ts
+ * const body = applyModelRequestOptions(
+ *   { model: "gpt-5", stream: true },
+ *   { speedMode: "fast", reasoningEffort: "high", reasoningSummary: "concise" },
+ * );
+ * ```
+ *
+ * @see {@link resolveModelRequestOptions}
+ */
 export function applyModelRequestOptions(
   body: Readonly<Record<string, unknown>>,
   options: ModelRequestOptions,
   supportsReasoningSummaryParameter = true,
 ): Record<string, unknown> {
+  // Omit unsupported/"none" summaries and only opt into the priority tier for Fast variants.
   return {
     ...body,
     reasoning: {
@@ -145,6 +203,7 @@ function parseConfiguredSummary(value: string | undefined): ReasoningSummary | "
 
 function parseLegacyMode(value: string | undefined): { speedMode?: SpeedMode; reasoningEffort?: ReasoningEffort } | undefined {
   if (!value) return undefined;
+  // Older picker values were either an effort or a speed:effort pair; keep both forms readable.
   const [first, second, extra] = value.split(":");
   if (extra !== undefined || !first) return undefined;
   if (second === undefined) {

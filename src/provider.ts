@@ -43,6 +43,18 @@ export interface CodexModel extends vscode.LanguageModelChatInformation {
 type InputItem = Record<string, unknown>;
 type OAuthCredentials = { token: string; accountId?: string };
 
+/**
+ * Adapts live ChatGPT Codex models and Responses API streams to VS Code Chat.
+ *
+ * @example
+ * ```ts
+ * const provider = new OpenAICodexProvider(oauth, output, userAgent);
+ * vscode.lm.registerLanguageModelChatProvider("openai-codex", provider);
+ * ```
+ *
+ * @see {@link CodexModel}
+ * @see {@link OpenAIOAuth}
+ */
 export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<CodexModel> {
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   private readonly usageEmitter = new vscode.EventEmitter<CodexUsageSnapshot>();
@@ -86,11 +98,24 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     }
   }
 
+  /**
+   * Loads and registers the current visible model catalog with VS Code.
+   *
+   * @example
+   * ```ts
+   * const models = await provider.provideLanguageModelChatInformation(options, token);
+   * console.log(models.map((model) => model.id));
+   * ```
+   *
+   * @see {@link parseCodexModelsPayload}
+   * @see {@link expandCodexModelVariants}
+   */
   async provideLanguageModelChatInformation(
     _options: vscode.PrepareLanguageModelChatModelOptions,
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
+    // Each refresh can change capabilities, defaults, and the presence of a Fast variant.
     const models = expandCodexModelVariants(await this.fetchModels(token));
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
@@ -242,6 +267,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   ): Promise<Response> {
     let response = await request(await this.oauth.getAccessToken());
     if (response.status === 401) {
+      // Refresh once for an expired token, but avoid retry loops on a persistent authorization failure.
       response = await request(await this.oauth.getAccessToken(true));
     }
     return response;
@@ -267,6 +293,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     const listener = cancellation.onCancellationRequested(() => controller.abort());
     if (cancellation.isCancellationRequested) controller.abort();
     try {
+      // Timeout and VS Code cancellation share one signal so every network path tears down consistently.
       return await this.fetcher(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timeout);
@@ -285,6 +312,7 @@ function resolveRequestOptions(
   requestConfiguration: Readonly<Record<string, unknown>> | undefined,
 ): ModelRequestOptions {
   const config = configuration();
+  // Keep legacy settings as fallbacks without overriding per-model picker configuration.
   const workspaceDefaults: Record<string, unknown> = {
     reasoningSummary: config.get("reasoningSummary", "auto"),
   };
@@ -299,6 +327,7 @@ function resolveRequestOptions(
 
 function explicitConfigurationValue<T>(config: vscode.WorkspaceConfiguration, key: string): T | undefined {
   const inspected = config.inspect<T>(key);
+  // Prefer the most specific configured scope, matching VS Code's effective-value precedence.
   return inspected?.workspaceFolderLanguageValue
     ?? inspected?.workspaceLanguageValue
     ?? inspected?.workspaceFolderValue

@@ -63,10 +63,24 @@ interface RemoteCodexModel {
 const DEFAULT_EFFECTIVE_CONTEXT_RATIO = 0.95;
 const DEFAULT_AUTO_COMPACT_RATIO = 0.9;
 
+/**
+ * Converts the backend model-directory response into selectable model metadata.
+ * Hidden models and models without a usable reasoning level are omitted.
+ *
+ * @example
+ * ```ts
+ * const models = parseCodexModelsPayload(await response.json());
+ * console.log(models.map((model) => model.id));
+ * ```
+ *
+ * @see {@link CodexModelMetadata}
+ * @see {@link expandCodexModelVariants}
+ */
 export function parseCodexModelsPayload(payload: unknown): CodexModelMetadata[] {
   const models = (payload as Partial<CodexModelsPayload> | null)?.models;
   if (!Array.isArray(models)) throw new Error("Codex model response is missing a models array");
 
+  // The directory can contain hidden or incomplete entries; only expose models the picker can use.
   const visibleModels = models
     .filter((model) => model.visibility === "list")
     .sort((left, right) => left.priority - right.priority)
@@ -75,6 +89,19 @@ export function parseCodexModelsPayload(payload: unknown): CodexModelMetadata[] 
   return visibleModels;
 }
 
+/**
+ * Adds the normal and, when advertised, Fast picker entries for each model.
+ * Both entries retain the backend model id used in requests.
+ *
+ * @example
+ * ```ts
+ * const variants = expandCodexModelVariants(models);
+ * const fastModels = variants.filter((model) => model.speedMode === "fast");
+ * ```
+ *
+ * @see {@link parseCodexModelsPayload}
+ * @see {@link CodexModelVariant}
+ */
 export function expandCodexModelVariants(models: readonly CodexModelMetadata[]): CodexModelVariant[] {
   return models.flatMap((model) => {
     const normal: CodexModelVariant = {
@@ -84,6 +111,7 @@ export function expandCodexModelVariants(models: readonly CodexModelMetadata[]):
       speedMode: "normal",
     };
     if (!model.supportsFast) return [normal];
+    // Fast changes the picker identity and service tier, while requests still use the same backend model id.
     return [normal, {
       ...model,
       registrationId: `${model.id}:fast`,
@@ -96,6 +124,7 @@ export function expandCodexModelVariants(models: readonly CodexModelMetadata[]):
 }
 
 function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {
+  // Some backend releases advertise internal-only "ultra"; do not let it leak into the picker.
   const reasoningLevels = model.supported_reasoning_levels.filter(({ effort }) => effort !== "ultra");
   const defaultReasoningLevel = reasoningLevels.find(({ effort }) => effort === model.default_reasoning_level)
     ?? reasoningLevels.at(-1);
@@ -138,6 +167,7 @@ function codexTokenLimits(model: RemoteCodexModel): { input: number; output: num
     model.auto_compact_token_limit ?? defaultAutoCompactLimit,
     defaultAutoCompactLimit,
   );
+  // Keep input below the compaction threshold and reserve the remaining effective window for output.
   const input = Math.min(autoCompactLimit, effectiveContextWindow);
   return { input, output: effectiveContextWindow - input };
 }

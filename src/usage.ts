@@ -60,9 +60,26 @@ export interface UsageDisplayRow {
   detail?: string;
 }
 
+/**
+ * Converts Responses API token usage into the compact payload VS Code consumes.
+ * Cache read and write counts remain nested under prompt token details.
+ *
+ * @example
+ * ```ts
+ * const usage = toProviderUsagePayload({
+ *   input_tokens: 100,
+ *   output_tokens: 20,
+ *   input_tokens_details: { cached_tokens: 80, cache_write_tokens: 10 },
+ * });
+ * ```
+ *
+ * @see {@link recordRequestUsage}
+ * @see {@link ProviderUsagePayload}
+ */
 export function toProviderUsagePayload(raw: Record<string, unknown>): ProviderUsagePayload | undefined {
   const usage = normalizeTokenUsage(raw);
   if (usage.promptTokens === undefined && usage.completionTokens === undefined && usage.totalTokens === undefined) return undefined;
+  // Match the nested Responses API shape while omitting empty detail objects.
   const promptTokenDetails = compactObject({
     cached_tokens: usage.cachedTokens,
     cache_write_tokens: usage.cacheWriteTokens,
@@ -76,6 +93,18 @@ export function toProviderUsagePayload(raw: Record<string, unknown>): ProviderUs
   });
 }
 
+/**
+ * Records the latest request and accumulates local token counters.
+ *
+ * @example
+ * ```ts
+ * const snapshot = recordRequestUsage({}, { input_tokens: 100, output_tokens: 20 }, "gpt-5.6-sol");
+ * console.log(snapshot.tracked?.totalTokens); // 120
+ * ```
+ *
+ * @see {@link toProviderUsagePayload}
+ * @see {@link formatUsageRows}
+ */
 export function recordRequestUsage(
   current: CodexUsageSnapshot,
   raw: Record<string, unknown>,
@@ -84,6 +113,7 @@ export function recordRequestUsage(
 ): CodexUsageSnapshot {
   const usage = normalizeTokenUsage(raw);
   const previous = current.tracked;
+  // Preserve the latest request separately while making tracked counters additive across requests.
   return {
     ...current,
     lastRequest: { modelId, recordedAt, ...usage },
@@ -164,6 +194,19 @@ export function formatUsageTooltip(snapshot: CodexUsageSnapshot, now = Date.now(
   return lines.join("\n");
 }
 
+/**
+ * Formats quota and locally tracked token usage for a VS Code picker.
+ * Cache reads and writes are included in the request details when available.
+ *
+ * @example
+ * ```ts
+ * const rows = formatUsageRows({ tracked: { requests: 1, promptTokens: 100, completionTokens: 20, totalTokens: 120, cachedTokens: 80, cacheWriteTokens: 10, reasoningTokens: 0 } });
+ * console.log(rows[0].label);
+ * ```
+ *
+ * @see {@link CodexUsageSnapshot}
+ * @see {@link formatUsageTooltip}
+ */
 export function formatUsageRows(snapshot: CodexUsageSnapshot, now = Date.now()): UsageDisplayRow[] {
   const rows: UsageDisplayRow[] = [];
   if (snapshot.primary) rows.push(windowRow(snapshot.primary, now));
@@ -194,6 +237,7 @@ export function formatUsageRows(snapshot: CodexUsageSnapshot, now = Date.now()):
 }
 
 function normalizeTokenUsage(raw: Record<string, unknown>): Omit<TokenUsage, "modelId" | "recordedAt"> {
+  // Responses API and compatibility payloads use different names for the same token detail objects.
   const inputDetails = asRecord(raw.input_tokens_details) ?? asRecord(raw.prompt_tokens_details);
   const outputDetails = asRecord(raw.output_tokens_details) ?? asRecord(raw.completion_tokens_details);
   const promptTokens = numberValue(raw.input_tokens ?? raw.prompt_tokens);
@@ -236,6 +280,7 @@ function windowSummary(window: RateLimitWindow, now: number): string {
 }
 
 function requestSummary(usage: TokenUsage): string {
+  // Keep cache reads and writes visible independently from total input/output counts.
   const cache = [
     usage.cachedTokens === undefined ? undefined : `${exactCount(usage.cachedTokens)} cached`,
     usage.cacheWriteTokens === undefined ? undefined : `${exactCount(usage.cacheWriteTokens)} cache write`,

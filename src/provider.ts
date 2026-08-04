@@ -116,7 +116,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    // Each refresh can change capabilities, defaults, and the presence of a Fast variant.
+    // Each refresh can change capabilities, defaults, and the available Speed Mode toggle.
     const models = expandCodexModelVariants(await this.fetchModels(token));
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   applyModelRequestOptions,
   buildModelConfigurationSchema,
+  modelOptionSpec,
   resolveModelRequestOptions,
   type ModelOptionSpec,
 } from "./model-options";
@@ -15,6 +16,7 @@ const spec: ModelOptionSpec = {
   },
   defaultEffort: "medium",
   supportsFast: true,
+  fastDescription: "Faster generation",
   supportsReasoningSummaryParameter: true,
   defaultReasoningSummary: "auto",
 };
@@ -35,6 +37,22 @@ test("resolves picker options and applies them to a Fast request", () => {
   assert.deepEqual(applyModelRequestOptions({ model: "gpt-5.6-sol" }, options), {
     model: "gpt-5.6-sol",
     reasoning: { effort: "adaptive", summary: "detailed" },
+    service_tier: "priority",
+  });
+});
+
+test("lets a normal model switch to Fast through its configuration", () => {
+  const options = resolveModelRequestOptions(
+    spec,
+    { speedMode: "fast", reasoningEffort: "adaptive" },
+    {},
+    "normal",
+  );
+
+  assert.equal(options.speedMode, "fast");
+  assert.deepEqual(applyModelRequestOptions({ model: "gpt-5.6-sol" }, options), {
+    model: "gpt-5.6-sol",
+    reasoning: { effort: "adaptive", summary: "auto" },
     service_tier: "priority",
   });
 });
@@ -88,13 +106,45 @@ test("builds picker controls from the live model metadata", () => {
     "Let the model choose",
   ]);
   assert.equal(schema.properties.reasoningEffort.default, "adaptive");
+  assert.deepEqual(schema.properties.speedMode.enum, ["normal", "fast"]);
+  assert.deepEqual(schema.properties.speedMode.enumDescriptions, [
+    "Standard speed and usage",
+    "Faster generation",
+  ]);
+  assert.equal(schema.properties.speedMode.group, "tokens");
+  assert.equal(schema.properties.speedMode.default, "normal");
   assert.equal(schema.properties.reasoningSummary.default, "concise");
+
+  const legacyFastDefaultSchema = buildModelConfigurationSchema(spec, {
+    speedMode: "fast",
+    reasoningEffort: "adaptive",
+    reasoningSummary: "concise",
+  });
+  assert.deepEqual(legacyFastDefaultSchema.properties.speedMode.enum, ["normal", "fast"]);
+  assert.equal(legacyFastDefaultSchema.properties.speedMode.default, "fast");
 
   const unsupported = buildModelConfigurationSchema({
     ...spec,
     supportsReasoningSummaryParameter: false,
   });
   assert.equal("reasoningSummary" in unsupported.properties, false);
+});
+
+test("carries the live Fast-tier description into the picker schema", () => {
+  const optionSpec = modelOptionSpec({
+    reasoningLevels: [{ effort: "medium", description: "Balanced reasoning" }],
+    defaultReasoningEffort: "medium",
+    supportsFast: true,
+    fastDescription: "Priority responses",
+    supportsReasoningSummaryParameter: false,
+    defaultReasoningSummary: "none",
+  });
+
+  assert.equal(optionSpec.fastDescription, "Priority responses");
+  assert.deepEqual(buildModelConfigurationSchema(optionSpec).properties.speedMode.enumDescriptions, [
+    "Standard speed and usage",
+    "Priority responses",
+  ]);
 });
 
 test("omits reasoning summaries when disabled or unsupported", () => {

@@ -1,6 +1,7 @@
 .github/**
 .changeset/**
 .vscode/**
+.codex/**
 docs/**
 assets/cover.jpg
 .gitignore

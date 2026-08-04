@@ -90,12 +90,12 @@
             "fast"
           ],
           "default": "normal",
-          "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer selecting a Normal or Fast model entry.",
+          "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer the per-model Speed Mode control.",
           "enumDescriptions": [
             "Standard speed and usage",
             "1.5x speed with increased usage on supported models"
           ],
-          "description": "Legacy default Codex processing speed. The live catalog and model-specific selection remain authoritative."
+          "description": "Legacy default Codex processing speed. The live catalog and model-specific Speed Mode control remain authoritative."
         },
         "openaiCodex.reasoningSummary": {
           "type": "string",

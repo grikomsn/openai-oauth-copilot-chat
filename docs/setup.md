@@ -7,8 +7,9 @@ Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload
 Use **Codex Bridge: Manage Connection** to authenticate. After sign-in, open Copilot Chat's model picker and enable a model under **Manage Models → Codex Bridge**.
 
 Each model exposes the reasoning efforts advertised by the live Codex catalog. Models
-that advertise the `fast` additional speed tier also have a separate model entry ending in
-**Fast**. Choosing that entry requests faster processing with increased account usage.
+that advertise the `fast` additional speed tier expose a native **Speed Mode** control
+with Normal and Fast choices. Selecting Fast requests faster processing with increased
+account usage without adding a separate Fast model entry.
 
 The `openaiCodex.reasoningSummary` setting controls the Responses API
 `reasoning.summary` value. `auto`, `concise`, and `detailed` request the corresponding
@@ -21,8 +22,9 @@ picker for new selections.
 
 Codex Bridge requests the available models after sign-in instead of bundling a static
 list. It registers picker-visible models in upstream priority order and maps their
-display names, descriptions, context windows, capabilities, reasoning efforts, and
-Fast availability from the catalog response. Upstream hidden models are not registered.
+prettified display names, descriptions, context windows, capabilities, reasoning
+efforts, and Fast availability from the catalog response. Upstream hidden models are
+not registered.
 
 After sign-in, the **Codex** status-bar item shows ChatGPT subscription utilization for the primary and secondary quota windows. Click it to refresh quota, inspect reset times, or view exact input/output tokens from the most recent inference. Those normalized token counts are also reported to Copilot Chat so its context-window percentage reflects real usage.
 

@@ -13,6 +13,7 @@ export interface ModelOptionSpec {
   descriptions: Readonly<Partial<Record<ReasoningEffort, string>>>;
   defaultEffort: ReasoningEffort;
   supportsFast: boolean;
+  fastDescription?: string;
   supportsReasoningSummaryParameter: boolean;
   defaultReasoningSummary: ReasoningSummary;
 }
@@ -38,7 +39,7 @@ export interface ModelRequestOptions {
 export function modelOptionSpec(
   model: Pick<
     CodexModelMetadata,
-    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
+    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "fastDescription" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
   >,
 ): ModelOptionSpec {
   return {
@@ -46,6 +47,7 @@ export function modelOptionSpec(
     descriptions: Object.fromEntries(model.reasoningLevels.map((level) => [level.effort, level.description])),
     defaultEffort: model.defaultReasoningEffort,
     supportsFast: model.supportsFast,
+    fastDescription: model.fastDescription,
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
     defaultReasoningSummary: model.defaultReasoningSummary,
   };
@@ -106,6 +108,7 @@ export function resolveModelRequestOptions(
  * ```ts
  * const schema = buildModelConfigurationSchema(spec, defaults);
  * console.log(schema.properties.reasoningEffort.enum);
+ * console.log(schema.properties.speedMode.enum);
  * ```
  *
  * @see {@link ModelOptionSpec}
@@ -122,6 +125,11 @@ export function buildModelConfigurationSchema(
     ? defaults.reasoningEffort
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
+  // Every Fast-capable model has one picker entry, so its Speed Mode toggle is
+  // always visible; legacy Fast defaults only choose the initial toggle value.
+  // Keep this in the tokens group because VS Code renders one control per group.
+  const exposesSpeedMode = spec.supportsFast;
+  const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
   return {
     type: "object",
     properties: {
@@ -134,6 +142,20 @@ export function buildModelConfigurationSchema(
         default: defaultEffort,
         group: "navigation",
       },
+      ...(exposesSpeedMode ? {
+        speedMode: {
+          type: "string",
+          title: "Speed Mode",
+          enum: ["normal", "fast"],
+          enumItemLabels: ["Normal", "Fast"],
+          enumDescriptions: [
+            "Standard speed and usage",
+            spec.fastDescription ?? "Faster generation with increased usage",
+          ],
+          default: defaultSpeedMode,
+          group: "tokens",
+        },
+      } : {}),
       ...(spec.supportsReasoningSummaryParameter ? {
         reasoningSummary: {
           type: "string",
@@ -172,7 +194,7 @@ export function applyModelRequestOptions(
   options: ModelRequestOptions,
   supportsReasoningSummaryParameter = true,
 ): Record<string, unknown> {
-  // Omit unsupported/"none" summaries and only opt into the priority tier for Fast variants.
+  // Omit unsupported/"none" summaries and only opt into the priority tier for Fast mode.
   return {
     ...body,
     reasoning: {

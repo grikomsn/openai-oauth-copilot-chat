@@ -90,13 +90,14 @@ export function parseCodexModelsPayload(payload: unknown): CodexModelMetadata[] 
 }
 
 /**
- * Adds the normal and, when advertised, Fast picker entries for each model.
- * Both entries retain the backend model id used in requests.
+ * Normalizes each live model into one picker entry.
+ * Fast remains a capability on the normal entry and is selected through its
+ * native Speed Mode configuration instead of a second picker entry.
  *
  * @example
  * ```ts
  * const variants = expandCodexModelVariants(models);
- * const fastModels = variants.filter((model) => model.speedMode === "fast");
+ * console.log(variants.map((model) => model.name));
  * ```
  *
  * @see {@link parseCodexModelsPayload}
@@ -104,23 +105,29 @@ export function parseCodexModelsPayload(payload: unknown): CodexModelMetadata[] 
  */
 export function expandCodexModelVariants(models: readonly CodexModelMetadata[]): CodexModelVariant[] {
   return models.flatMap((model) => {
+    // Keep one stable picker identity so Speed Mode is the only way to opt into Fast.
     const normal: CodexModelVariant = {
       ...model,
       registrationId: model.id,
       rawModelId: model.id,
       speedMode: "normal",
     };
-    if (!model.supportsFast) return [normal];
-    // Fast changes the picker identity and service tier, while requests still use the same backend model id.
-    return [normal, {
-      ...model,
-      registrationId: `${model.id}:fast`,
-      rawModelId: model.id,
-      name: `${model.name} Fast`,
-      speedMode: "fast",
-      detail: model.fastDescription,
-    }];
+    return [normal];
   });
+}
+
+/**
+ * Formats a catalog label for the model picker without changing its product name.
+ *
+ * @example
+ * ```ts
+ * formatCodexDisplayName("GPT-5.6-Luna"); // "GPT 5.6 Luna"
+ * ```
+ *
+ * @see {@link parseCodexModelsPayload}
+ */
+export function formatCodexDisplayName(displayName: string): string {
+  return displayName.replaceAll("-", " ").replace(/\s+/g, " ").trim();
 }
 
 function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {
@@ -138,7 +145,7 @@ function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {
 
   return {
     id: model.slug,
-    name: model.display_name,
+    name: formatCodexDisplayName(model.display_name),
     description: model.description,
     version: model.comp_hash ?? model.slug,
     input,

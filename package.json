@@ -69,6 +69,34 @@
     "configuration": {
       "title": "Codex Bridge for Copilot Chat",
       "properties": {
+        "openaiCodex.reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "default": "high",
+          "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer the live model picker.",
+          "description": "Legacy default reasoning effort sent to Codex when no model-specific value is selected. Unsupported values fall back to the live model default."
+        },
+        "openaiCodex.speedMode": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "fast"
+          ],
+          "default": "normal",
+          "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer selecting a Normal or Fast model entry.",
+          "enumDescriptions": [
+            "Standard speed and usage",
+            "1.5x speed with increased usage on supported models"
+          ],
+          "description": "Legacy default Codex processing speed. The live catalog and model-specific selection remain authoritative."
+        },
         "openaiCodex.reasoningSummary": {
           "type": "string",
           "enum": [
@@ -121,6 +149,7 @@
     "test": "npm run compile && node --test \"out/**/*.test.js\"",
     "check": "npm test",
     "changeset": "changeset",
+    "update-codex-version": "node scripts/update-codex-version.mjs",
     "version": "changeset version",
     "release": "npm run check && vsce publish --skip-duplicate",
     "prepackage": "npm run check",

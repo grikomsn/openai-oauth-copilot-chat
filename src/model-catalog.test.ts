@@ -45,7 +45,7 @@ test("maps the visible remote catalog metadata", () => {
   })), [
     {
       id: "gpt-5.6-sol",
-      name: "Codex 5.6 Sol",
+      name: "GPT-5.6-Sol",
       image: true,
       efforts: ["low", "adaptive"],
       defaultEffort: "adaptive",
@@ -56,7 +56,7 @@ test("maps the visible remote catalog metadata", () => {
     },
     {
       id: "gpt-5.4-mini",
-      name: "Codex 5.4 Mini",
+      name: "GPT-5.4-Mini",
       image: false,
       efforts: ["medium"],
       defaultEffort: "medium",
@@ -122,14 +122,14 @@ test("expands Fast models without changing their backend slug", () => {
     {
       registrationId: "gpt-5.6-terra",
       rawModelId: "gpt-5.6-terra",
-      name: "Codex 5.6 Terra",
+      name: "GPT-5.6-Terra",
       speedMode: "normal",
       detail: undefined,
     },
     {
       registrationId: "gpt-5.6-terra:fast",
       rawModelId: "gpt-5.6-terra",
-      name: "Codex 5.6 Terra Fast",
+      name: "GPT-5.6-Terra Fast",
       speedMode: "fast",
       detail: "Faster generation",
     },

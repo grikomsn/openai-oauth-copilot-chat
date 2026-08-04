@@ -14,6 +14,7 @@ const spec: ModelOptionSpec = {
     adaptive: "Let the model choose",
   },
   defaultEffort: "medium",
+  supportsFast: true,
   supportsReasoningSummaryParameter: true,
   defaultReasoningSummary: "auto",
 };
@@ -51,6 +52,26 @@ test("falls back to live model defaults and reads legacy picker values", () => {
   assert.equal(
     resolveModelRequestOptions(spec, { mode: "fast:adaptive" }, {}, "normal").reasoningEffort,
     "adaptive",
+  );
+});
+
+test("retains legacy workspace effort and speed fallbacks", () => {
+  assert.deepEqual(
+    resolveModelRequestOptions(
+      spec,
+      undefined,
+      { reasoningEffort: "adaptive", speedMode: "fast", reasoningSummary: "model" },
+      "normal",
+    ),
+    { speedMode: "fast", reasoningEffort: "adaptive", reasoningSummary: "auto" },
+  );
+  assert.equal(
+    resolveModelRequestOptions({ ...spec, supportsFast: false }, undefined, { speedMode: "fast" }, "normal").speedMode,
+    "normal",
+  );
+  assert.equal(
+    resolveModelRequestOptions(spec, undefined, { speedMode: "normal" }, "fast").speedMode,
+    "fast",
   );
 });
 

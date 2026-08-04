@@ -44,7 +44,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("openaiCodex.showUsage", () => showUsage(provider, output)),
     vscode.commands.registerCommand("openaiCodex.diagnostics", () => diagnostics(oauth, output)),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("openaiCodex.reasoningSummary")) {
+      if (event.affectsConfiguration("openaiCodex.reasoningSummary")
+        || event.affectsConfiguration("openaiCodex.reasoningEffort")
+        || event.affectsConfiguration("openaiCodex.speedMode")) {
         provider.fireDidChange();
       }
       if (event.affectsConfiguration("openaiCodex.showUsageStatusBar")) updateUsageStatusVisibility(usageStatus);

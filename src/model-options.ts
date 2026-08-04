@@ -12,6 +12,7 @@ export interface ModelOptionSpec {
   efforts: readonly ReasoningEffort[];
   descriptions: Readonly<Partial<Record<ReasoningEffort, string>>>;
   defaultEffort: ReasoningEffort;
+  supportsFast: boolean;
   supportsReasoningSummaryParameter: boolean;
   defaultReasoningSummary: ReasoningSummary;
 }
@@ -25,13 +26,14 @@ export interface ModelRequestOptions {
 export function modelOptionSpec(
   model: Pick<
     CodexModelMetadata,
-    "reasoningLevels" | "defaultReasoningEffort" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
+    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
   >,
 ): ModelOptionSpec {
   return {
     efforts: model.reasoningLevels.map((level) => level.effort),
     descriptions: Object.fromEntries(model.reasoningLevels.map((level) => [level.effort, level.description])),
     defaultEffort: model.defaultReasoningEffort,
+    supportsFast: model.supportsFast,
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
     defaultReasoningSummary: model.defaultReasoningSummary,
   };
@@ -43,10 +45,15 @@ export function resolveModelRequestOptions(
   workspaceDefaults: Readonly<Record<string, unknown>>,
   speedMode: SpeedMode,
 ): ModelRequestOptions {
+  const legacyMode = parseLegacyMode(stringOption(requestConfiguration, "mode"));
   const requestedEffort = parseConfiguredEffort(stringOption(requestConfiguration, "reasoningEffort"))
-    ?? parseLegacyMode(stringOption(requestConfiguration, "mode"));
+    ?? legacyMode?.reasoningEffort
+    ?? parseConfiguredEffort(stringOption(workspaceDefaults, "reasoningEffort"));
   const requestedSummary = parseConfiguredSummary(stringOption(requestConfiguration, "reasoningSummary"))
     ?? parseConfiguredSummary(stringOption(workspaceDefaults, "reasoningSummary"));
+  const requestedSpeed = parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
+    ?? legacyMode?.speedMode
+    ?? parseConfiguredSpeed(stringOption(workspaceDefaults, "speedMode"));
   return {
     reasoningEffort: requestedEffort && spec.efforts.includes(requestedEffort)
       ? requestedEffort
@@ -54,7 +61,9 @@ export function resolveModelRequestOptions(
     reasoningSummary: requestedSummary === "model" || requestedSummary === undefined
       ? spec.defaultReasoningSummary
       : requestedSummary,
-    speedMode,
+    speedMode: speedMode === "fast"
+      ? "fast"
+      : spec.supportsFast && requestedSpeed === "fast" ? "fast" : "normal",
   };
 }
 
@@ -126,16 +135,25 @@ function parseConfiguredEffort(value: string | undefined): ReasoningEffort | und
   return value && value !== "model" ? value : undefined;
 }
 
+function parseConfiguredSpeed(value: string | undefined): SpeedMode | undefined {
+  return value === "normal" || value === "fast" ? value : undefined;
+}
+
 function parseConfiguredSummary(value: string | undefined): ReasoningSummary | "model" | undefined {
   return value === "model" ? value : REASONING_SUMMARIES.find((summary) => summary === value);
 }
 
-function parseLegacyMode(value: string | undefined): ReasoningEffort | undefined {
+function parseLegacyMode(value: string | undefined): { speedMode?: SpeedMode; reasoningEffort?: ReasoningEffort } | undefined {
   if (!value) return undefined;
-  const parts = value.split(":");
-  if (parts.length > 2) return undefined;
-  const effort = parts.length === 2 ? parts[1] : parts[0];
-  return effort || undefined;
+  const [first, second, extra] = value.split(":");
+  if (extra !== undefined || !first) return undefined;
+  if (second === undefined) {
+    return first === "normal" || first === "fast"
+      ? { speedMode: first }
+      : { reasoningEffort: first };
+  }
+  if (first !== "normal" && first !== "fast") return undefined;
+  return { speedMode: first, reasoningEffort: second };
 }
 
 function formatOptionLabel(value: string): string {

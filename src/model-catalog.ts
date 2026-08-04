@@ -95,10 +95,6 @@ export function expandCodexModelVariants(models: readonly CodexModelMetadata[]):
   });
 }
 
-export function formatCodexDisplayName(displayName: string): string {
-  return displayName.replaceAll("-", " ").replaceAll("GPT", "Codex").replace(/\s+/g, " ").trim();
-}
-
 function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {
   const reasoningLevels = model.supported_reasoning_levels.filter(({ effort }) => effort !== "ultra");
   const defaultReasoningLevel = reasoningLevels.find(({ effort }) => effort === model.default_reasoning_level)
@@ -113,7 +109,7 @@ function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {
 
   return {
     id: model.slug,
-    name: formatCodexDisplayName(model.display_name),
+    name: model.display_name,
     description: model.description,
     version: model.comp_hash ?? model.slug,
     input,

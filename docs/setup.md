@@ -15,6 +15,10 @@ The `openaiCodex.reasoningSummary` setting controls the Responses API
 summary detail; `none` omits the request field, and `model` follows the live catalog
 default. Models that do not accept this parameter omit it automatically.
 
+The legacy `openaiCodex.speedMode` and `openaiCodex.reasoningEffort` settings remain
+supported as workspace fallbacks for existing configurations. Prefer the live model
+picker for new selections.
+
 Codex Bridge requests the available models after sign-in instead of bundling a static
 list. It registers picker-visible models in upstream priority order and maps their
 display names, descriptions, context windows, capabilities, reasoning efforts, and

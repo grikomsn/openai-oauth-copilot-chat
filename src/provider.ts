@@ -17,10 +17,10 @@ import {
 } from "./model-catalog";
 import { OpenAIOAuth } from "./oauth";
 import {
-  CHATGPT_CODEX_MODELS_URL,
+  CODEX_MODELS_CLIENT_VERSION,
   CHATGPT_CODEX_RESPONSES_URL,
   CHATGPT_CODEX_USAGE_URL,
-  CODEX_MODELS_CLIENT_VERSION,
+  chatgptCodexModelsUrl,
   OAUTH_ORIGINATOR,
 } from "./protocol";
 import { ResponsesStreamParser, type CodexStreamEvent } from "./sse";
@@ -189,7 +189,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     credentials: OAuthCredentials,
     cancellation: vscode.CancellationToken,
   ): Promise<Response> {
-    return this.fetchWithCancellation(CHATGPT_CODEX_MODELS_URL, {
+    return this.fetchWithCancellation(chatgptCodexModelsUrl(CODEX_MODELS_CLIENT_VERSION), {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         Originator: OAUTH_ORIGINATOR,
@@ -285,9 +285,26 @@ function resolveRequestOptions(
   requestConfiguration: Readonly<Record<string, unknown>> | undefined,
 ): ModelRequestOptions {
   const config = configuration();
-  return resolveModelRequestOptions(spec, requestConfiguration, {
+  const workspaceDefaults: Record<string, unknown> = {
     reasoningSummary: config.get("reasoningSummary", "auto"),
+  };
+  const legacyReasoningEffort = explicitConfigurationValue<string>(config, "reasoningEffort");
+  if (legacyReasoningEffort !== undefined) workspaceDefaults.reasoningEffort = legacyReasoningEffort;
+  const legacySpeedMode = explicitConfigurationValue<string>(config, "speedMode");
+  if (legacySpeedMode !== undefined) workspaceDefaults.speedMode = legacySpeedMode;
+  return resolveModelRequestOptions(spec, requestConfiguration, {
+    ...workspaceDefaults,
   }, speedMode);
+}
+
+function explicitConfigurationValue<T>(config: vscode.WorkspaceConfiguration, key: string): T | undefined {
+  const inspected = config.inspect<T>(key);
+  return inspected?.workspaceFolderLanguageValue
+    ?? inspected?.workspaceLanguageValue
+    ?? inspected?.workspaceFolderValue
+    ?? inspected?.workspaceValue
+    ?? inspected?.globalLanguageValue
+    ?? inspected?.globalValue;
 }
 
 function buildRequest(

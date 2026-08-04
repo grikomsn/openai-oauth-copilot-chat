@@ -51,8 +51,8 @@ allowance.
 3. Choose **Sign in with ChatGPT** and complete the browser flow.
 4. In Copilot Chat, open the model picker, choose **Manage Models**, enable **Codex Bridge**, and select a Codex model.
 
-Catalog names are normalized for the picker by replacing hyphens with spaces and
-replacing `GPT` with `Codex`.
+Model names and descriptions come from the live catalog; Fast variants add a
+**Fast** suffix to the catalog name.
 
 If another process uses local port `1455`, choose **Sign in manually**. If the Codex CLI is already signed in, **Import Codex CLI Session** can copy its OAuth session from `~/.codex/auth.json` into VS Code Secret Storage.
 
@@ -71,6 +71,7 @@ If another process uses local port `1455`, choose **Sign in manually**. If the C
 ## Settings
 
 - `openaiCodex.reasoningSummary`: workspace default for reasoning summaries; choose `auto`, `concise`, `detailed`, or `none`, while `model` follows the live catalog default
+- Legacy `openaiCodex.speedMode` and `openaiCodex.reasoningEffort` settings remain supported as workspace fallbacks for existing configurations. Prefer the live model picker for new selections.
 
 Each model defaults to the catalog's `default_reasoning_level` and exposes only the
 reasoning efforts advertised by that catalog. Fast

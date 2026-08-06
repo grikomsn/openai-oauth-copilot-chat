@@ -1,3 +1,5 @@
+/** Model-picker configuration and request-option translation. */
+
 import {
   REASONING_SUMMARIES,
   type CodexModelMetadata,
@@ -8,6 +10,7 @@ import {
 
 export type { ReasoningEffort, ReasoningSummary, SpeedMode } from "./model-catalog";
 
+/** Capabilities used to build a model's configuration controls. */
 export interface ModelOptionSpec {
   efforts: readonly ReasoningEffort[];
   descriptions: Readonly<Partial<Record<ReasoningEffort, string>>>;
@@ -18,6 +21,7 @@ export interface ModelOptionSpec {
   defaultReasoningSummary: ReasoningSummary;
 }
 
+/** Options resolved from the picker and workspace fallback settings. */
 export interface ModelRequestOptions {
   speedMode: SpeedMode;
   reasoningEffort: ReasoningEffort;

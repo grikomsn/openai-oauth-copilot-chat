@@ -1,3 +1,6 @@
+/** Responses streaming primitives used by the VS Code provider. */
+
+/** A normalized event emitted by the Codex Responses SSE parser. */
 export interface CodexStreamEvent {
   text?: string;
   reasoning?: string;
@@ -8,10 +11,23 @@ export interface CodexStreamEvent {
   error?: string;
 }
 
+/**
+ * Incrementally parses server-sent events from the Codex Responses endpoint.
+ *
+ * The parser tolerates incomplete chunks and unknown event types so transport
+ * changes do not interrupt an otherwise valid response.
+ *
+ * @see {@link OpenAICodexProvider} in `provider.ts`
+ */
 export class ResponsesStreamParser {
   private buffer = "";
   private readonly toolArguments = new Map<string, string>();
 
+  /**
+   * Adds a transport chunk and returns every complete event it contains.
+   *
+   * @param chunk A UTF-8 SSE chunk decoded as text.
+   */
   push(chunk: string): CodexStreamEvent[] {
     this.buffer += chunk.replace(/\r\n/g, "\n");
     const events: CodexStreamEvent[] = [];
@@ -25,6 +41,7 @@ export class ResponsesStreamParser {
     return events;
   }
 
+  /** Flushes the final unterminated SSE block, if one exists. */
   finish(): CodexStreamEvent[] {
     const tail = this.buffer.trim();
     this.buffer = "";

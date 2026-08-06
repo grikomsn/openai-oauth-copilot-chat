@@ -1,3 +1,5 @@
+/** PKCE sign-in, callback handling, refresh, and SecretStorage persistence. */
+
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { homedir } from "node:os";
@@ -19,6 +21,7 @@ const CALLBACK_PATH = "/auth/callback";
 const SCOPE = "openid email profile offline_access";
 const SECRET_KEY = "openaiCodex.oauthSession.v1";
 
+/** Persisted OAuth credentials used for ChatGPT Codex requests. */
 export interface OAuthSession {
   accessToken: string;
   refreshToken: string;
@@ -27,12 +30,14 @@ export interface OAuthSession {
   email?: string;
 }
 
+/** Dependencies and callbacks for the interactive authorization flow. */
 export interface AuthorizationFlow {
   url: string;
   state: string;
   verifier: string;
 }
 
+/** Browser launch dependency used by interactive sign-in. */
 export interface BrowserSignIn {
   url: string;
   completion: Promise<OAuthSession>;
@@ -41,6 +46,12 @@ export interface BrowserSignIn {
 
 type Fetcher = typeof fetch;
 
+/**
+ * Owns the extension's OAuth session and refresh lifecycle.
+ *
+ * Credentials are stored in VS Code SecretStorage; callers receive only the
+ * access token and optional ChatGPT account identifier needed for a request.
+ */
 export class OpenAIOAuth {
   private refreshPromise: Promise<OAuthSession> | undefined;
 

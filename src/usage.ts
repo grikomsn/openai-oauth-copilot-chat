@@ -1,3 +1,6 @@
+/** Usage payload normalization, local tracking, and display formatting. */
+
+/** Token counts reported by one Codex inference request. */
 export interface TokenUsage {
   modelId: string;
   recordedAt: number;
@@ -9,6 +12,7 @@ export interface TokenUsage {
   reasoningTokens?: number;
 }
 
+/** Locally accumulated token totals for the current extension session. */
 export interface TrackedTokenUsage {
   requests: number;
   promptTokens: number;
@@ -19,12 +23,14 @@ export interface TrackedTokenUsage {
   reasoningTokens: number;
 }
 
+/** One ChatGPT quota window and its reset information. */
 export interface RateLimitWindow {
   usedPercent: number;
   windowSeconds?: number;
   resetsAt?: number;
 }
 
+/** A named quota family beyond the primary and secondary windows. */
 export interface AdditionalRateLimit {
   id: string;
   name: string;
@@ -32,6 +38,7 @@ export interface AdditionalRateLimit {
   secondary?: RateLimitWindow;
 }
 
+/** Complete usage state shown by the extension. */
 export interface CodexUsageSnapshot {
   planType?: string;
   primary?: RateLimitWindow;
@@ -45,6 +52,7 @@ export interface CodexUsageSnapshot {
   updatedAt?: number;
 }
 
+/** Compact token payload sent to VS Code's language-model provider API. */
 export interface ProviderUsagePayload {
   prompt_tokens?: number;
   completion_tokens?: number;
@@ -53,6 +61,7 @@ export interface ProviderUsagePayload {
   completion_tokens_details?: { reasoning_tokens: number };
 }
 
+/** One row rendered in the usage quick pick. */
 export interface UsageDisplayRow {
   kind: "quota" | "tokens" | "tracked" | "credits" | "warning" | "empty";
   label: string;

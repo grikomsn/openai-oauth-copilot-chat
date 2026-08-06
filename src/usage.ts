@@ -31,6 +31,24 @@ export interface RateLimitWindow {
 }
 
 /** A named quota family beyond the primary and secondary windows. */
+
+/** One banked Codex rate-limit reset credit. */
+export interface RateLimitResetCredit {
+  id?: string;
+  resetType?: string;
+  status?: string;
+  grantedAt?: number;
+  expiresAt?: number;
+  title?: string;
+  description?: string;
+}
+
+/** Banked Codex reset credits returned by the account backend. */
+export interface RateLimitResetCredits {
+  availableCount: number;
+  credits?: RateLimitResetCredit[];
+}
+
 export interface AdditionalRateLimit {
   id: string;
   name: string;
@@ -46,6 +64,8 @@ export interface CodexUsageSnapshot {
   additional?: AdditionalRateLimit[];
   limitReached?: boolean;
   credits?: { hasCredits?: boolean; unlimited?: boolean; balance?: string };
+  resetCredits?: RateLimitResetCredits;
+  resetCreditsError?: string;
   lastRequest?: TokenUsage;
   tracked?: TrackedTokenUsage;
   error?: string;
@@ -63,10 +83,12 @@ export interface ProviderUsagePayload {
 
 /** One row rendered in the usage quick pick. */
 export interface UsageDisplayRow {
-  kind: "quota" | "tokens" | "tracked" | "credits" | "warning" | "empty";
+  kind: "quota" | "reset" | "tokens" | "tracked" | "credits" | "warning" | "empty";
   label: string;
   description: string;
   detail?: string;
+  action?: "redeemReset";
+  actionId?: string;
 }
 
 /**
@@ -178,6 +200,59 @@ export function mergeQuotaPayload(
   });
 }
 
+export function mergeResetCreditsPayload(
+  current: CodexUsageSnapshot,
+  raw: unknown,
+  updatedAt = Date.now(),
+): CodexUsageSnapshot {
+  const payload = asRecord(raw);
+  if (!payload) return { ...current, resetCreditsError: "OpenAI returned invalid reset-credit details", updatedAt };
+  const nested = asRecord(payload.rate_limit_reset_credits) ?? asRecord(payload.rateLimitResetCredits);
+  const source = nested ?? payload;
+  const rawCredits = Array.isArray(source.credits) ? source.credits : undefined;
+  const credits = rawCredits?.flatMap(parseResetCredit);
+  const availableCount = numberValue(source.available_count ?? source.availableCount);
+  if (availableCount === undefined && credits === undefined) {
+    return { ...current, resetCreditsError: "OpenAI returned invalid reset-credit details", updatedAt };
+  }
+  return {
+    ...current,
+    resetCredits: compactObject({
+      availableCount: availableCount ?? credits?.length ?? 0,
+      credits,
+    }),
+    resetCreditsError: undefined,
+    updatedAt,
+  };
+}
+
+export function parseResetCreditConsumePayload(raw: unknown): { outcome: string; windowsReset?: number } {
+  const payload = asRecord(raw);
+  const rawOutcome = stringValue(payload?.outcome) ?? stringValue(payload?.code);
+  if (!rawOutcome) throw new Error("OpenAI returned an invalid reset-credit response");
+  return compactObject({
+    outcome: normalizeResetCreditOutcome(rawOutcome),
+    windowsReset: numberValue(payload?.windows_reset ?? payload?.windowsReset),
+  });
+}
+
+export function buildResetCreditConsumePayload(creditId: string, redeemRequestId: string): { credit_id: string; redeem_request_id: string } {
+  return { credit_id: creditId, redeem_request_id: redeemRequestId };
+}
+
+/**
+ * Removes opaque reset-credit IDs before a usage snapshot is persisted in VS Code global state.
+ */
+export function usageSnapshotForPersistence(snapshot: CodexUsageSnapshot): CodexUsageSnapshot {
+  return {
+    ...snapshot,
+    resetCredits: snapshot.resetCredits ? {
+      availableCount: snapshot.resetCredits.availableCount,
+      credits: snapshot.resetCredits.credits?.map(({ id: _id, ...credit }) => credit),
+    } : undefined,
+  };
+}
+
 export function formatUsageStatusBar(snapshot: CodexUsageSnapshot): string {
   const windows = [snapshot.primary, snapshot.secondary].filter((value): value is RateLimitWindow => Boolean(value));
   if (windows.length) {
@@ -194,9 +269,11 @@ export function formatUsageTooltip(snapshot: CodexUsageSnapshot, now = Date.now(
   const lines = [`Codex Bridge usage${snapshot.planType ? ` (${snapshot.planType})` : ""}`];
   if (snapshot.primary) lines.push(windowSummary(snapshot.primary, now));
   if (snapshot.secondary) lines.push(windowSummary(snapshot.secondary, now));
+  if (snapshot.resetCredits?.availableCount) lines.push(`Reset credits: ${snapshot.resetCredits.availableCount}`);
   if (snapshot.lastRequest) lines.push(`Last request: ${requestSummary(snapshot.lastRequest)}`);
   if (snapshot.tracked) lines.push(`Tracked locally: ${snapshot.tracked.requests.toLocaleString()} requests · ${snapshot.tracked.totalTokens.toLocaleString()} tokens`);
   if (snapshot.credits?.balance) lines.push(`Credit balance: ${snapshot.credits.balance}`);
+  if (snapshot.resetCreditsError) lines.push(`Reset-credit refresh: ${snapshot.resetCreditsError}`);
   if (snapshot.error) lines.push(`Refresh error: ${snapshot.error}`);
   if (snapshot.updatedAt) lines.push(`Updated ${new Date(snapshot.updatedAt).toLocaleString()}`);
   lines.push("Click for details");
@@ -223,6 +300,17 @@ export function formatUsageRows(snapshot: CodexUsageSnapshot, now = Date.now()):
   for (const limit of snapshot.additional ?? []) {
     if (limit.primary) rows.push({ ...windowRow(limit.primary, now), label: limit.name });
   }
+  if (snapshot.resetCredits?.availableCount) {
+    const credits = [...(snapshot.resetCredits.credits ?? [])].sort((left, right) => (left.expiresAt ?? Number.POSITIVE_INFINITY) - (right.expiresAt ?? Number.POSITIVE_INFINITY));
+    for (const credit of credits) rows.push(resetCreditRow(credit, now));
+    const undisclosedCount = snapshot.resetCredits.availableCount - credits.length;
+    if (!credits.length || undisclosedCount > 0) rows.push({
+      kind: "reset",
+      label: `${snapshot.resetCredits.availableCount.toLocaleString()} reset credit${snapshot.resetCredits.availableCount === 1 ? "" : "s"} available`,
+      description: credits.length ? `${undisclosedCount.toLocaleString()} credit detail${undisclosedCount === 1 ? "" : "s"} unavailable` : "Credit details unavailable",
+      detail: "Refresh usage to try again",
+    });
+  }
   if (snapshot.lastRequest) rows.push({
     kind: "tokens",
     label: "Last inference",
@@ -241,8 +329,28 @@ export function formatUsageRows(snapshot: CodexUsageSnapshot, now = Date.now()):
     description: snapshot.credits.unlimited ? "Unlimited" : snapshot.credits.balance ?? "Available",
   });
   if (snapshot.error) rows.push({ kind: "warning", label: "Usage refresh failed", description: snapshot.error });
+  if (snapshot.resetCreditsError) rows.push({ kind: "warning", label: "Reset credits unavailable", description: snapshot.resetCreditsError });
   if (!rows.length) rows.push({ kind: "empty", label: "No usage observed yet", description: "Send a Codex request or refresh usage" });
   return rows;
+}
+
+function resetCreditRow(credit: RateLimitResetCredit, now: number): UsageDisplayRow {
+  const description = credit.expiresAt
+    ? `Expires ${formatDate(credit.expiresAt)} (${formatReset(credit.expiresAt, now)})`
+    : "Expiry unavailable";
+  const detail = [
+    credit.description,
+    credit.grantedAt ? `Granted ${formatDate(credit.grantedAt)}` : undefined,
+    credit.status && credit.status !== "available" ? `Status: ${credit.status}` : undefined,
+  ].filter((value): value is string => Boolean(value)).join(" · ");
+  return {
+    kind: "reset",
+    label: credit.title ?? resetCreditTypeLabel(credit.resetType),
+    description,
+    detail: detail || "Redeems both the 5-hour and weekly Codex windows",
+    action: credit.id ? "redeemReset" : undefined,
+    actionId: credit.id,
+  };
 }
 
 function normalizeTokenUsage(raw: Record<string, unknown>): Omit<TokenUsage, "modelId" | "recordedAt"> {
@@ -273,6 +381,21 @@ function parseWindow(value: unknown): RateLimitWindow | undefined {
     windowSeconds: numberValue(raw.limit_window_seconds),
     resetsAt: resetAtSeconds === undefined ? undefined : resetAtSeconds * 1000,
   });
+}
+
+function parseResetCredit(value: unknown): RateLimitResetCredit[] {
+  const raw = asRecord(value);
+  if (!raw) return [];
+  const credit = compactObject({
+    id: stringValue(raw.id) ?? stringValue(raw.credit_id) ?? stringValue(raw.creditId),
+    resetType: stringValue(raw.reset_type) ?? stringValue(raw.resetType),
+    status: stringValue(raw.status),
+    grantedAt: timestampValue(raw.granted_at ?? raw.grantedAt),
+    expiresAt: timestampValue(raw.expires_at ?? raw.expiresAt),
+    title: stringValue(raw.title) ?? stringValue(raw.name),
+    description: stringValue(raw.description),
+  });
+  return Object.keys(credit).length ? [credit] : [];
 }
 
 function windowRow(window: RateLimitWindow, now: number): UsageDisplayRow {
@@ -318,6 +441,24 @@ function formatReset(resetsAt: number, now: number): string {
   return `in ${hours}h${remainder ? ` ${remainder}m` : ""}`;
 }
 
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleString();
+}
+
+function resetCreditTypeLabel(resetType: string | undefined): string {
+  if (!resetType) return "Codex reset credit";
+  if (resetType.toLowerCase().includes("codex")) return "Codex rate-limit reset";
+  return `${resetType} reset`;
+}
+
+function normalizeResetCreditOutcome(outcome: string): string {
+  return ({
+    already_redeemed: "alreadyRedeemed",
+    nothing_to_reset: "nothingToReset",
+    no_credit: "noCredit",
+  } as Record<string, string>)[outcome] ?? outcome;
+}
+
 function compactCount(value: number | undefined): string {
   if (value === undefined) return "?";
   if (value >= 10_000) return `${Math.round(value / 1000)}k`;
@@ -332,6 +473,17 @@ function exactCount(value: number | undefined): string {
 function numberValue(value: unknown): number | undefined {
   const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function timestampValue(value: unknown): number | undefined {
+  if (typeof value === "number" || (typeof value === "string" && value.trim() && !Number.isNaN(Number(value)))) {
+    const parsed = numberValue(value);
+    if (parsed === undefined) return undefined;
+    return parsed < 100_000_000_000 ? parsed * 1000 : parsed;
+  }
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function stringValue(value: unknown): string | undefined {

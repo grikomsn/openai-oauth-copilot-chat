@@ -68,7 +68,7 @@ If another process uses local port `1455`, choose **Sign in manually**. If the C
 | Codex Bridge: Sign In Manually                            | Paste a callback URL when port 1455 is unavailable           |
 | Codex Bridge: Import Codex CLI Session (Advanced)         | Copy an existing local Codex CLI login after a warning       |
 | Codex Bridge: Test Connection                             | Send a small live request to the Codex backend               |
-| Codex Bridge: Show Usage                                  | Refresh and inspect subscription quota plus inference tokens |
+| Codex Bridge: Show Usage                                  | Refresh and inspect subscription quota, reset credits, and inference tokens |
 | Codex Bridge: Show Diagnostics                            | Show session presence and registered models without secrets  |
 
 ## Settings
@@ -86,7 +86,7 @@ selection overrides the workspace default.
 - `openaiCodex.debugLogging`: request metadata only; prompts and tokens are never logged
 - `openaiCodex.showUsageStatusBar`: show or hide the Codex quota/token indicator
 
-The status bar reads the same ChatGPT Codex quota endpoint used by Codex CLI and shows the primary and secondary utilization windows. Click it for reset times, the last inference token count, and cumulative tokens tracked by this extension on the current device.
+The status bar reads the same ChatGPT Codex quota endpoint used by Codex CLI and shows the primary and secondary utilization windows. Click it for reset times, available banked reset credits when the account exposes them, the last inference token count, and cumulative tokens tracked by this extension on the current device. A banked reset applies to both the 5-hour and weekly windows; redeeming one requires explicit confirmation.
 
 ## Documentation
 

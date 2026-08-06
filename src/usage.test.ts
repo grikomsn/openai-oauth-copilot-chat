@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildResetCreditConsumePayload,
   formatUsageStatusBar,
+  formatUsageRows,
   mergeQuotaPayload,
+  mergeResetCreditsPayload,
+  parseResetCreditConsumePayload,
   recordRequestUsage,
   toProviderUsagePayload,
+  usageSnapshotForPersistence,
 } from "./usage";
 
 test("normalizes Responses API usage for Copilot inference reporting", () => {
@@ -54,4 +59,51 @@ test("parses Codex primary and secondary subscription windows", () => {
   assert.deepEqual(snapshot.primary, { usedPercent: 18, windowSeconds: 18_000, resetsAt: 2_000_000 });
   assert.deepEqual(snapshot.secondary, { usedPercent: 42, windowSeconds: 604_800, resetsAt: 3_000_000 });
   assert.equal(formatUsageStatusBar(snapshot), "$(pulse) Codex 5h 18% · 7d 42%");
+});
+
+test("handles an account with no banked reset credits", () => {
+  const snapshot = mergeResetCreditsPayload({}, { available_count: 0, credits: [] }, 2_000);
+  assert.deepEqual(snapshot.resetCredits, { availableCount: 0, credits: [] });
+  assert.equal(snapshot.resetCreditsError, undefined);
+  assert.equal(formatUsageRows(snapshot).some((row) => row.kind === "reset"), false);
+});
+
+test("sorts reset credits by expiry and exposes only ephemeral redemption IDs", () => {
+  const snapshot = mergeResetCreditsPayload({}, {
+    available_count: 2,
+    credits: [
+      {
+        id: "later-credit",
+        title: "Full reset (Weekly + 5 hr)",
+        expires_at: "2026-08-30T00:00:00Z",
+        granted_at: "2026-07-31T00:00:00Z",
+      },
+      {
+        credit_id: "earlier-credit",
+        reset_type: "codexRateLimits",
+        expires_at: "2026-08-15T00:00:00Z",
+      },
+    ] as unknown,
+  }, 3_000);
+  const rows = formatUsageRows(snapshot, Date.parse("2026-08-07T00:00:00Z"));
+  assert.equal(rows[0].label, "Codex rate-limit reset");
+  assert.equal(rows[0].action, "redeemReset");
+  assert.equal(rows[0].actionId, "earlier-credit");
+  assert.equal(rows[1].actionId, "later-credit");
+  assert.equal(rows[0].description.includes("Expires"), true);
+
+  const persisted = usageSnapshotForPersistence(snapshot);
+  assert.equal(persisted.resetCredits?.credits?.[0].id, undefined);
+  assert.equal(persisted.resetCredits?.credits?.[1].id, undefined);
+});
+
+test("normalizes reset-credit consume outcomes and builds an idempotent request", () => {
+  assert.deepEqual(parseResetCreditConsumePayload({ code: "already_redeemed", windows_reset: 2 }), {
+    outcome: "alreadyRedeemed",
+    windowsReset: 2,
+  });
+  assert.deepEqual(buildResetCreditConsumePayload("credit-1", "request-1"), {
+    credit_id: "credit-1",
+    redeem_request_id: "request-1",
+  });
 });

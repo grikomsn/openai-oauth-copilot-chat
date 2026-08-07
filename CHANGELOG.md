@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+### Patch Changes
+
+- 4a67635: Show available Codex banked reset credits with expiry details and require explicit confirmation before redeeming a selected reset.
+
 ## 0.5.0
 
 ### Minor Changes

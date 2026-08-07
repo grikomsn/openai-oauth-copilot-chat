@@ -236,8 +236,12 @@ export function parseResetCreditConsumePayload(raw: unknown): { outcome: string;
   });
 }
 
-export function buildResetCreditConsumePayload(creditId: string, redeemRequestId: string): { credit_id: string; redeem_request_id: string } {
-  return { credit_id: creditId, redeem_request_id: redeemRequestId };
+export function buildResetCreditConsumePayload(
+  creditId: string,
+  redeemRequestId: string,
+  accountId?: string,
+): { credit_id: string; redeem_request_id: string; account_id?: string } {
+  return compactObject({ credit_id: creditId, redeem_request_id: redeemRequestId, account_id: accountId });
 }
 
 /**
@@ -348,8 +352,8 @@ function resetCreditRow(credit: RateLimitResetCredit, now: number): UsageDisplay
     label: credit.title ?? resetCreditTypeLabel(credit.resetType),
     description,
     detail: detail || "Redeems both the 5-hour and weekly Codex windows",
-    action: credit.id ? "redeemReset" : undefined,
-    actionId: credit.id,
+    action: credit.id && credit.status === "available" ? "redeemReset" : undefined,
+    actionId: credit.id && credit.status === "available" ? credit.id : undefined,
   };
 }
 

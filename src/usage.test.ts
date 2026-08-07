@@ -75,12 +75,14 @@ test("sorts reset credits by expiry and exposes only ephemeral redemption IDs", 
       {
         id: "later-credit",
         title: "Full reset (Weekly + 5 hr)",
+        status: "available",
         expires_at: "2026-08-30T00:00:00Z",
         granted_at: "2026-07-31T00:00:00Z",
       },
       {
         credit_id: "earlier-credit",
         reset_type: "codexRateLimits",
+        status: "available",
         expires_at: "2026-08-15T00:00:00Z",
       },
     ] as unknown,
@@ -97,13 +99,32 @@ test("sorts reset credits by expiry and exposes only ephemeral redemption IDs", 
   assert.equal(persisted.resetCredits?.credits?.[1].id, undefined);
 });
 
-test("normalizes reset-credit consume outcomes and builds an idempotent request", () => {
+test("only exposes available reset credits as redeemable", () => {
+  const snapshot = mergeResetCreditsPayload({}, {
+    available_count: 2,
+    credits: [
+      { id: "available-credit", status: "available" },
+      { id: "redeemed-credit", status: "redeemed" },
+    ],
+  });
+  const rows = formatUsageRows(snapshot);
+  assert.equal(rows[0].actionId, "available-credit");
+  assert.equal(rows[1].action, undefined);
+  assert.equal(rows[1].actionId, undefined);
+});
+
+test("normalizes reset-credit consume outcomes and builds account-scoped requests", () => {
   assert.deepEqual(parseResetCreditConsumePayload({ code: "already_redeemed", windows_reset: 2 }), {
     outcome: "alreadyRedeemed",
     windowsReset: 2,
   });
-  assert.deepEqual(buildResetCreditConsumePayload("credit-1", "request-1"), {
+  assert.deepEqual(buildResetCreditConsumePayload("credit-1", "request-1", "account-1"), {
     credit_id: "credit-1",
     redeem_request_id: "request-1",
+    account_id: "account-1",
+  });
+  assert.deepEqual(buildResetCreditConsumePayload("credit-1", "request-2"), {
+    credit_id: "credit-1",
+    redeem_request_id: "request-2",
   });
 });

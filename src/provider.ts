@@ -21,6 +21,8 @@ import { OpenAIOAuth } from "./oauth";
 import { buildPromptCacheRequestFields, createPromptCacheTransportHeaders } from "./prompt-cache";
 import {
   CODEX_MODELS_CLIENT_VERSION,
+  CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL,
+  CHATGPT_CODEX_RESET_CREDITS_URL,
   CHATGPT_CODEX_RESPONSES_URL,
   CHATGPT_CODEX_USAGE_URL,
   chatgptCodexModelsUrl,
@@ -28,7 +30,10 @@ import {
 } from "./protocol";
 import { ResponsesStreamParser, type CodexStreamEvent } from "./sse";
 import {
+  buildResetCreditConsumePayload,
   mergeQuotaPayload,
+  mergeResetCreditsPayload,
+  parseResetCreditConsumePayload,
   recordRequestUsage,
   toProviderUsagePayload,
   type CodexUsageSnapshot,
@@ -93,13 +98,39 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     try {
       const response = await this.sendWithAuthRetry((credentials) => this.sendUsageRequest(credentials));
       if (!response.ok) throw await responseError("Unable to refresh OpenAI Codex usage", response);
-      this.lastQuotaFetchAt = Date.now();
-      this.setUsage(mergeQuotaPayload(this.usage, await response.json(), this.lastQuotaFetchAt));
+      const updatedAt = Date.now();
+      this.lastQuotaFetchAt = updatedAt;
+      let next = mergeQuotaPayload(this.usage, await response.json(), updatedAt);
+      try {
+        const resetCreditsResponse = await this.sendWithAuthRetry((credentials) => this.sendResetCreditsRequest(credentials));
+        if (!resetCreditsResponse.ok) {
+          next = { ...next, resetCredits: undefined, resetCreditsError: "The Codex backend did not provide reset-credit details" };
+        } else {
+          next = mergeResetCreditsPayload(next, await resetCreditsResponse.json(), updatedAt);
+        }
+      } catch {
+        // Reset-credit details are optional; quota refresh remains useful when this private endpoint changes.
+        next = { ...next, resetCredits: undefined, resetCreditsError: "Reset-credit details could not be refreshed" };
+      }
+      this.setUsage(next);
       return this.usage;
     } catch (error) {
       this.setUsage({ ...this.usage, error: messageOf(error), updatedAt: Date.now() });
       throw error;
     }
+  }
+
+  async consumeResetCredit(creditId: string): Promise<{ outcome: string; windowsReset?: number }> {
+    const redeemRequestId = randomUUID();
+    const response = await this.sendWithAuthRetry((credentials) => this.sendResetCreditConsumeRequest(credentials, creditId, redeemRequestId));
+    if (!response.ok) throw await responseError("Unable to redeem OpenAI Codex reset credit", response);
+    const result = parseResetCreditConsumePayload(await response.json());
+    try {
+      await this.refreshUsage();
+    } catch {
+      // The redemption result is authoritative even if the follow-up snapshot is temporarily unavailable.
+    }
+    return result;
   }
 
   /**
@@ -230,6 +261,31 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   private sendUsageRequest(credentials: OAuthCredentials): Promise<Response> {
     return this.fetcher(CHATGPT_CODEX_USAGE_URL, {
       headers: this.authHeaders(credentials, "application/json"),
+    });
+  }
+
+  private sendResetCreditsRequest(credentials: OAuthCredentials): Promise<Response> {
+    return this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
+      headers: {
+        ...this.authHeaders(credentials, "application/json"),
+        "OpenAI-Beta": "codex-1",
+      },
+    });
+  }
+
+  private sendResetCreditConsumeRequest(
+    credentials: OAuthCredentials,
+    creditId: string,
+    redeemRequestId: string,
+  ): Promise<Response> {
+    return this.fetcher(CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL, {
+      method: "POST",
+      headers: {
+        ...this.authHeaders(credentials, "application/json"),
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "codex-1",
+      },
+      body: JSON.stringify(buildResetCreditConsumePayload(creditId, redeemRequestId)),
     });
   }
 

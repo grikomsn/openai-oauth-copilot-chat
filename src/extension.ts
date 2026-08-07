@@ -7,6 +7,7 @@ import {
   formatUsageRows,
   formatUsageStatusBar,
   formatUsageTooltip,
+  usageSnapshotForPersistence,
   type CodexUsageSnapshot,
   type UsageDisplayRow,
 } from "./usage";
@@ -33,7 +34,7 @@ export function activate(context: vscode.ExtensionContext): void {
     provider.onDidChangeUsage((usage) => {
       renderUsageStatus(usageStatus, usage);
       updateUsageStatusVisibility(usageStatus);
-      void context.globalState.update(USAGE_STATE_KEY, usage);
+      void context.globalState.update(USAGE_STATE_KEY, usageSnapshotForPersistence(usage));
     }),
     vscode.lm.registerLanguageModelChatProvider("openai-codex", provider),
     vscode.commands.registerCommand("openaiCodex.manage", () => manage(oauth, provider, output, usageStatus)),
@@ -190,6 +191,37 @@ async function showUsage(provider: OpenAICodexProvider, output: vscode.OutputCha
   });
   if (picked?.action === "refresh") await showUsage(provider, output);
   else if (picked?.action === "open") await vscode.env.openExternal(vscode.Uri.parse("https://chatgpt.com/codex"));
+  else if (picked?.action === "redeemReset" && picked.resetCreditId) await redeemReset(provider, output, picked.resetCreditId);
+}
+
+async function redeemReset(provider: OpenAICodexProvider, output: vscode.OutputChannel, creditId: string): Promise<void> {
+  const confirmation = await vscode.window.showWarningMessage(
+    "Redeem this Codex reset credit? It resets both the 5-hour and weekly usage windows and consumes one banked reset.",
+    { modal: true },
+    "Redeem reset",
+  );
+  if (confirmation !== "Redeem reset") return;
+  try {
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: "Redeeming Codex reset credit…" },
+      () => provider.consumeResetCredit(creditId),
+    );
+    if (result.outcome === "reset") {
+      const windowText = result.windowsReset ? ` (${result.windowsReset} windows reset)` : "";
+      vscode.window.showInformationMessage(`Codex reset credit redeemed${windowText}.`);
+    } else if (result.outcome === "alreadyRedeemed") {
+      vscode.window.showInformationMessage("This Codex reset request was already redeemed.");
+    } else if (result.outcome === "noCredit") {
+      vscode.window.showWarningMessage("No Codex reset credit is currently available.");
+    } else if (result.outcome === "nothingToReset") {
+      vscode.window.showWarningMessage("There is no Codex usage window eligible for an immediate reset.");
+    } else {
+      vscode.window.showWarningMessage(`Codex reset response: ${result.outcome}`);
+    }
+    await showUsage(provider, output);
+  } catch (error) {
+    showError("Codex reset credit redemption failed", error, output);
+  }
 }
 
 function renderUsageStatus(item: vscode.StatusBarItem, snapshot: CodexUsageSnapshot): void {
@@ -203,19 +235,28 @@ function updateUsageStatusVisibility(item: vscode.StatusBarItem): void {
 }
 
 interface UsageQuickPickItem extends vscode.QuickPickItem {
-  action?: "refresh" | "open";
+  action?: "refresh" | "open" | "redeemReset";
+  resetCreditId?: string;
 }
 
 function toUsageQuickPickItem(row: UsageDisplayRow): UsageQuickPickItem {
   const icon = {
     quota: "$(pulse)",
+    reset: "$(refresh)",
     tokens: "$(symbol-numeric)",
     tracked: "$(history)",
     credits: "$(credit-card)",
     warning: "$(warning)",
     empty: "$(circle-slash)",
   }[row.kind];
-  return { label: `${icon} ${row.label}`, description: row.description, detail: row.detail, alwaysShow: true };
+  return {
+    label: `${icon} ${row.label}`,
+    description: row.description,
+    detail: row.detail,
+    alwaysShow: true,
+    action: row.action,
+    resetCreditId: row.actionId,
+  };
 }
 
 async function diagnostics(oauth: OpenAIOAuth, output: vscode.OutputChannel): Promise<void> {

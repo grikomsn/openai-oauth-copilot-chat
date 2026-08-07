@@ -268,6 +268,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     return this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
+        Originator: OAUTH_ORIGINATOR,
         "OpenAI-Beta": "codex-1",
       },
     });
@@ -283,9 +284,10 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         "Content-Type": "application/json",
+        Originator: OAUTH_ORIGINATOR,
         "OpenAI-Beta": "codex-1",
       },
-      body: JSON.stringify(buildResetCreditConsumePayload(creditId, redeemRequestId)),
+      body: JSON.stringify(buildResetCreditConsumePayload(creditId, redeemRequestId, credentials.accountId)),
     });
   }
 

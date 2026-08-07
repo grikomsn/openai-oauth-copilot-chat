@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+### Patch Changes
+
+- 874d062: Harden Codex reset-credit requests with originator and account routing, and prevent non-available credits from being redeemable.
+
 ## 0.5.1
 
 ### Patch Changes

@@ -35,6 +35,19 @@ test("emits completed function calls", () => {
   assert.deepEqual(events, [{ toolCall: { id: "c1", name: "read_file", arguments: '{"path":"a"}' } }]);
 });
 
+test("preserves hosted web-search calls and citations as data events", () => {
+  const parser = new ResponsesStreamParser();
+  const events = parser.push([
+    'data: {"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws1","status":"completed","action":{"type":"search","queries":["latest OpenAI news"]}}}',
+    'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","url":"https://example.com","title":"Example"}}',
+  ].join("\n\n") + "\n\n");
+
+  assert.deepEqual(events, [
+    { webSearchCall: { id: "ws1", status: "completed", action: { type: "search", queries: ["latest OpenAI news"] } } },
+    { webSearchAnnotation: { type: "url_citation", url: "https://example.com", title: "Example" } },
+  ]);
+});
+
 test("preserves encrypted reasoning for stateless follow-up requests", () => {
   const parser = new ResponsesStreamParser();
   const events = parser.push('data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"r1","encrypted_content":"ciphertext"}}\n\n');

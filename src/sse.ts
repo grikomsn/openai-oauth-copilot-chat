@@ -7,6 +7,8 @@ export interface CodexStreamEvent {
   reasoningBoundary?: true;
   encryptedReasoning?: { id: string; data: string };
   toolCall?: { id: string; name: string; arguments: string };
+  webSearchCall?: { id: string; status?: string; action?: Record<string, unknown> };
+  webSearchAnnotation?: Record<string, unknown>;
   usage?: Record<string, unknown>;
   error?: string;
 }
@@ -74,12 +76,23 @@ export class ResponsesStreamParser {
       this.toolArguments.set(id, (this.toolArguments.get(id) ?? "") + delta);
       return undefined;
     }
+    if (type === "response.output_text.annotation.added") {
+      const annotation = recordField(value, "annotation");
+      return annotation ? [{ webSearchAnnotation: annotation }] : undefined;
+    }
     if (type === "response.output_item.done") {
       const item = recordField(value, "item");
       if (item?.type === "function_call") {
         const id = stringField(item, "call_id") ?? stringField(item, "id") ?? `codex-tool-${Date.now()}`;
         const args = stringField(item, "arguments") ?? this.toolArguments.get(stringField(item, "id") ?? id) ?? "{}";
         return [{ toolCall: { id, name: stringField(item, "name") ?? "tool", arguments: args } }];
+      }
+      if (item?.type === "web_search_call") {
+        return [{ webSearchCall: {
+          id: stringField(item, "id") ?? `web-search-${Date.now()}`,
+          status: stringField(item, "status"),
+          action: recordField(item, "action"),
+        } }];
       }
       if (item?.type === "reasoning") {
         const encrypted = stringField(item, "encrypted_content");

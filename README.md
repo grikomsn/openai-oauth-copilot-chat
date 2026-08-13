@@ -20,7 +20,7 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 - ChatGPT OAuth with PKCE and automatic access-token refresh
 - Models discovered from the live Codex catalog for the signed-in ChatGPT account
 - Streaming responses, reasoning summaries, images, and tool calling
-- Per-model reasoning effort and Speed Mode controls
+- Per-model reasoning effort, opt-in Web Search, and Speed Mode controls
 - Native Copilot context-window accounting from Codex inference token usage
 - Automatic OpenAI prompt-cache reuse for eligible prefixes across normal chat turns and agent tool loops
 - Status-bar indicator for five-hour/weekly ChatGPT Codex quota and locally tracked tokens
@@ -32,6 +32,10 @@ extension. Display names, descriptions, context windows, image/tool capabilities
 reasoning efforts, and Fast availability are derived from the signed-in account's
 catalog response. Models that advertise the `fast` additional speed tier expose a native
 **Speed Mode** control on their normal model entry.
+Every model also exposes an opt-in **Web Search** control beside its reasoning
+controls. It is disabled by default; when enabled, the request includes the
+Codex Responses API's hosted `web_search` tool and preserves streamed search
+annotations as provider data.
 
 Context limits follow Codex's own runtime policy: the catalog's effective-window
 percentage defines the usable hard window, while its auto-compaction threshold defines
@@ -81,6 +85,8 @@ reasoning efforts advertised by that catalog. Fast processing can be selected th
 the model's native **Speed Mode** control; it uses more account capacity.
 Models that accept `reasoning.summary` also expose a per-model summary control; that
 selection overrides the workspace default.
+**Web Search** is an independent per-model toggle and remains disabled unless selected
+in the model picker.
 
 - `openaiCodex.requestTimeoutSeconds`: total request timeout
 - `openaiCodex.debugLogging`: request metadata only; prompts and tokens are never logged

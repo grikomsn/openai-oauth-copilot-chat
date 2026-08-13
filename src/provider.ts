@@ -17,6 +17,7 @@ import {
   parseCodexModelsPayload,
   type CodexModelMetadata,
 } from "./model-catalog";
+import { buildNativeTools } from "./native-tools";
 import { OpenAIOAuth } from "./oauth";
 import { buildPromptCacheRequestFields, createPromptCacheTransportHeaders } from "./prompt-cache";
 import {
@@ -196,7 +197,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
 
     if (configuration().get("debugLogging", false)) {
-      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} initiator=${options.requestInitiator ?? "unknown"}`);
+      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} initiator=${options.requestInitiator ?? "unknown"}`);
     }
     await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId));
     if (Date.now() - this.lastQuotaFetchAt > 60_000) {
@@ -416,6 +417,8 @@ function buildRequest(
     parameters: tool.inputSchema && typeof tool.inputSchema === "object" ? tool.inputSchema : { type: "object", properties: {} },
     strict: false,
   }));
+  const nativeTools = buildNativeTools(requestOptions);
+  const allTools = [...nativeTools, ...tools];
   const convertedInput = messages.flatMap(convertMessage);
   const input = convertedInput.length
     ? convertedInput
@@ -423,7 +426,7 @@ function buildRequest(
   const promptCache = buildPromptCacheRequestFields({
     model,
     instructions: DEFAULT_INSTRUCTIONS,
-    tools,
+    tools: allTools,
     input,
   });
   return applyModelRequestOptions({
@@ -433,8 +436,8 @@ function buildRequest(
     store: false,
     stream: true,
     include: ["reasoning.encrypted_content"],
-    ...(tools.length ? {
-      tools,
+    ...(allTools.length ? {
+      tools: allTools,
       tool_choice: options.toolMode === vscode.LanguageModelChatToolMode.Required ? "required" : "auto",
       parallel_tool_calls: supportsParallelToolCalls,
     } : {}),
@@ -511,10 +514,27 @@ function reportEvent(event: CodexStreamEvent, progress: vscode.Progress<vscode.L
   if (event.toolCall) {
     progress.report(new vscode.LanguageModelToolCallPart(event.toolCall.id, event.toolCall.name, parseArguments(event.toolCall.arguments)));
   }
+  if (event.webSearchCall) {
+    reportDataPart(progress, "web-search", event.webSearchCall);
+  }
+  if (event.webSearchAnnotation) {
+    reportDataPart(progress, "web-search-annotation", event.webSearchAnnotation);
+  }
   if (event.usage) {
     const usage = toProviderUsagePayload(event.usage);
     if (usage) progress.report(new vscode.LanguageModelDataPart(new TextEncoder().encode(JSON.stringify(usage)), "usage"));
   }
+}
+
+function reportDataPart(
+  progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
+  kind: string,
+  value: Record<string, unknown>,
+): void {
+  progress.report(new vscode.LanguageModelDataPart(
+    new TextEncoder().encode(JSON.stringify({ kind, ...value })),
+    "application/vnd.openai.web-search+json",
+  ));
 }
 
 function parseArguments(value: string): object {

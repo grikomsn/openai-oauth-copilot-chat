@@ -26,6 +26,7 @@ export interface ModelRequestOptions {
   speedMode: SpeedMode;
   reasoningEffort: ReasoningEffort;
   reasoningSummary: ReasoningSummary;
+  webSearch: boolean;
 }
 
 /**
@@ -87,6 +88,8 @@ export function resolveModelRequestOptions(
     ?? parseConfiguredEffort(stringOption(workspaceDefaults, "reasoningEffort"));
   const requestedSummary = parseConfiguredSummary(stringOption(requestConfiguration, "reasoningSummary"))
     ?? parseConfiguredSummary(stringOption(workspaceDefaults, "reasoningSummary"));
+  const requestedWebSearch = booleanOption(requestConfiguration, "webSearch")
+    ?? booleanOption(workspaceDefaults, "webSearch");
   const requestedSpeed = parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
     ?? legacyMode?.speedMode
     ?? parseConfiguredSpeed(stringOption(workspaceDefaults, "speedMode"));
@@ -98,6 +101,7 @@ export function resolveModelRequestOptions(
     reasoningSummary: requestedSummary === "model" || requestedSummary === undefined
       ? spec.defaultReasoningSummary
       : requestedSummary,
+    webSearch: requestedWebSearch ?? false,
     speedMode: speedMode === "fast"
       ? "fast"
       : spec.supportsFast && requestedSpeed === "fast" ? "fast" : "normal",
@@ -146,6 +150,13 @@ export function buildModelConfigurationSchema(
         default: defaultEffort,
         group: "navigation",
       },
+      webSearch: {
+        type: "boolean",
+        title: "Web Search",
+        description: "Allow Codex to use OpenAI-hosted web search for this model.",
+        default: defaults?.webSearch ?? false,
+        group: "navigation",
+      },
       ...(exposesSpeedMode ? {
         speedMode: {
           type: "string",
@@ -187,7 +198,7 @@ export function buildModelConfigurationSchema(
  * ```ts
  * const body = applyModelRequestOptions(
  *   { model: "gpt-5", stream: true },
- *   { speedMode: "fast", reasoningEffort: "high", reasoningSummary: "concise" },
+ *   { speedMode: "fast", reasoningEffort: "high", reasoningSummary: "concise", webSearch: false },
  * );
  * ```
  *
@@ -213,6 +224,10 @@ export function applyModelRequestOptions(
 
 function stringOption(value: Readonly<Record<string, unknown>> | undefined, key: string): string | undefined {
   return typeof value?.[key] === "string" ? value[key] as string : undefined;
+}
+
+function booleanOption(value: Readonly<Record<string, unknown>> | undefined, key: string): boolean | undefined {
+  return typeof value?.[key] === "boolean" ? value[key] as boolean : undefined;
 }
 
 function parseConfiguredEffort(value: string | undefined): ReasoningEffort | undefined {

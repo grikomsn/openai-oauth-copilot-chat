@@ -24,7 +24,7 @@ const spec: ModelOptionSpec = {
 test("resolves picker options and applies them to a Fast request", () => {
   const options = resolveModelRequestOptions(
     spec,
-    { reasoningEffort: "adaptive", reasoningSummary: "detailed" },
+    { reasoningEffort: "adaptive", reasoningSummary: "detailed", webSearch: true },
     { reasoningSummary: "concise" },
     "fast",
   );
@@ -33,6 +33,7 @@ test("resolves picker options and applies them to a Fast request", () => {
     speedMode: "fast",
     reasoningEffort: "adaptive",
     reasoningSummary: "detailed",
+    webSearch: true,
   });
   assert.deepEqual(applyModelRequestOptions({ model: "gpt-5.6-sol" }, options), {
     model: "gpt-5.6-sol",
@@ -65,7 +66,7 @@ test("falls back to live model defaults and reads legacy picker values", () => {
       { reasoningEffort: "adaptive", reasoningSummary: "model" },
       "normal",
     ),
-    { speedMode: "normal", reasoningEffort: "medium", reasoningSummary: "auto" },
+    { speedMode: "normal", reasoningEffort: "medium", reasoningSummary: "auto", webSearch: false },
   );
   assert.equal(
     resolveModelRequestOptions(spec, { mode: "fast:adaptive" }, {}, "normal").reasoningEffort,
@@ -81,7 +82,7 @@ test("retains legacy workspace effort and speed fallbacks", () => {
       { reasoningEffort: "adaptive", speedMode: "fast", reasoningSummary: "model" },
       "normal",
     ),
-    { speedMode: "fast", reasoningEffort: "adaptive", reasoningSummary: "auto" },
+    { speedMode: "fast", reasoningEffort: "adaptive", reasoningSummary: "auto", webSearch: false },
   );
   assert.equal(
     resolveModelRequestOptions({ ...spec, supportsFast: false }, undefined, { speedMode: "fast" }, "normal").speedMode,
@@ -98,6 +99,7 @@ test("builds picker controls from the live model metadata", () => {
     speedMode: "normal",
     reasoningEffort: "adaptive",
     reasoningSummary: "concise",
+    webSearch: false,
   });
 
   assert.deepEqual(schema.properties.reasoningEffort.enum, ["medium", "adaptive"]);
@@ -106,6 +108,10 @@ test("builds picker controls from the live model metadata", () => {
     "Let the model choose",
   ]);
   assert.equal(schema.properties.reasoningEffort.default, "adaptive");
+  assert.equal(schema.properties.webSearch.type, "boolean");
+  assert.equal(schema.properties.webSearch.title, "Web Search");
+  assert.equal(schema.properties.webSearch.default, false);
+  assert.equal(schema.properties.webSearch.group, "navigation");
   assert.deepEqual(schema.properties.speedMode.enum, ["normal", "fast"]);
   assert.deepEqual(schema.properties.speedMode.enumDescriptions, [
     "Standard speed and usage",
@@ -119,9 +125,11 @@ test("builds picker controls from the live model metadata", () => {
     speedMode: "fast",
     reasoningEffort: "adaptive",
     reasoningSummary: "concise",
+    webSearch: false,
   });
   assert.deepEqual(legacyFastDefaultSchema.properties.speedMode.enum, ["normal", "fast"]);
   assert.equal(legacyFastDefaultSchema.properties.speedMode.default, "fast");
+  assert.equal(legacyFastDefaultSchema.properties.webSearch.default, false);
 
   const unsupported = buildModelConfigurationSchema({
     ...spec,

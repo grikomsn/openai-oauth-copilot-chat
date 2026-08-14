@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+### Minor Changes
+
+- 656cb92: Add an opt-in Web Search toggle beside the model reasoning controls and forward hosted Responses API search annotations to Copilot.
+
 ## 0.5.2
 
 ### Patch Changes

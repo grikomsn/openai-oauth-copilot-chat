@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ResponsesStreamParser } from "./sse";
+import { ResponsesStreamParser } from "./responses";
 
 test("parses fragmented Codex text and reasoning SSE", () => {
   const parser = new ResponsesStreamParser();

@@ -11,26 +11,16 @@ import {
   type ModelOptionSpec,
   type ModelRequestOptions,
   type SpeedMode,
-} from "./model-options";
+} from "./models/options";
 import {
   expandCodexModelVariants,
   parseCodexModelsPayload,
   type CodexModelMetadata,
-} from "./model-catalog";
-import { decodeGeneratedImage } from "./image-data";
-import { buildNativeTools } from "./native-tools";
-import { OpenAIOAuth } from "./oauth";
-import { buildPromptCacheRequestFields, createPromptCacheTransportHeaders } from "./prompt-cache";
-import {
-  CODEX_MODELS_CLIENT_VERSION,
-  CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL,
-  CHATGPT_CODEX_RESET_CREDITS_URL,
-  CHATGPT_CODEX_RESPONSES_URL,
-  CHATGPT_CODEX_USAGE_URL,
-  chatgptCodexModelsUrl,
-  OAUTH_ORIGINATOR,
-} from "./protocol";
-import { ResponsesStreamParser, type CodexStreamEvent } from "./sse";
+} from "./models/catalog";
+import { OpenAIOAuth } from "./auth/auth";
+import { partText } from "./provider/messages";
+import { buildRequest } from "./provider/request";
+import { consumeStream } from "./provider/response";
 import {
   buildResetCreditConsumePayload,
   mergeQuotaPayload,
@@ -39,9 +29,8 @@ import {
   recordRequestUsage,
   toProviderUsagePayload,
   type CodexUsageSnapshot,
-} from "./usage";
-
-const DEFAULT_INSTRUCTIONS = "You are OpenAI Codex, a coding agent in Visual Studio Code. Be concise, correct, and use the supplied tools when useful.";
+} from "./usage/domain";
+import { CodexTransport } from "./transport/client";
 
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
@@ -50,9 +39,6 @@ export interface CodexModel extends vscode.LanguageModelChatInformation {
   optionSpec: ModelOptionSpec;
   supportsParallelToolCalls: boolean;
 }
-
-type InputItem = Record<string, unknown>;
-type OAuthCredentials = { token: string; accountId?: string };
 
 /**
  * Adapts live ChatGPT Codex models and Responses API streams to VS Code Chat.
@@ -73,15 +59,22 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   readonly onDidChangeUsage = this.usageEmitter.event;
   private usage: CodexUsageSnapshot;
   private lastQuotaFetchAt = 0;
+  private readonly transport: CodexTransport;
 
   constructor(
-    private readonly oauth: OpenAIOAuth,
+    oauth: OpenAIOAuth,
     private readonly output: vscode.OutputChannel,
-    private readonly userAgent: string,
+    userAgent: string,
     initialUsage: CodexUsageSnapshot = {},
-    private readonly fetcher: typeof fetch = fetch,
+    fetcher: typeof fetch = fetch,
   ) {
     this.usage = initialUsage;
+    this.transport = new CodexTransport(
+      oauth,
+      userAgent,
+      () => configuration().get("requestTimeoutSeconds", 600),
+      fetcher,
+    );
   }
 
   fireDidChange(): void {
@@ -98,13 +91,13 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   async refreshUsage(): Promise<CodexUsageSnapshot> {
     try {
-      const response = await this.sendWithAuthRetry((credentials) => this.sendUsageRequest(credentials));
+      const response = await this.transport.sendUsage();
       if (!response.ok) throw await responseError("Unable to refresh OpenAI Codex usage", response);
       const updatedAt = Date.now();
       this.lastQuotaFetchAt = updatedAt;
       let next = mergeQuotaPayload(this.usage, await response.json(), updatedAt);
       try {
-        const resetCreditsResponse = await this.sendWithAuthRetry((credentials) => this.sendResetCreditsRequest(credentials));
+        const resetCreditsResponse = await this.transport.sendResetCredits();
         if (!resetCreditsResponse.ok) {
           next = { ...next, resetCredits: undefined, resetCreditsError: "The Codex backend did not provide reset-credit details" };
         } else {
@@ -124,7 +117,9 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   async consumeResetCredit(creditId: string): Promise<{ outcome: string; windowsReset?: number }> {
     const redeemRequestId = randomUUID();
-    const response = await this.sendWithAuthRetry((credentials) => this.sendResetCreditConsumeRequest(credentials, creditId, redeemRequestId));
+    const response = await this.transport.sendResetCreditConsume((accountId) => JSON.stringify(
+      buildResetCreditConsumePayload(creditId, redeemRequestId, accountId),
+    ));
     if (!response.ok) throw await responseError("Unable to redeem OpenAI Codex reset credit", response);
     const result = parseResetCreditConsumePayload(await response.json());
     try {
@@ -193,7 +188,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       model.supportsParallelToolCalls,
       model.optionSpec.supportsReasoningSummaryParameter,
     );
-    const response = await this.sendWithAuthRetry((credentials) => this.sendRequest(credentials, body, token));
+    const response = await this.transport.sendResponse(body, token);
     if (!response.ok) throw await responseError(`OpenAI Codex request failed for ${model.rawModelId}`, response);
     if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
 
@@ -228,7 +223,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         stream: true,
         include: ["reasoning.encrypted_content"],
       }, requestOptions, model.supportsReasoningSummaryParameter);
-      const response = await this.sendWithAuthRetry((credentials) => this.sendRequest(credentials, body, cancellation.token));
+      const response = await this.transport.sendResponse(body, cancellation.token);
       if (!response.ok) throw await responseError("OpenAI Codex connection test failed", response);
       if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
       const text: string[] = [];
@@ -242,55 +237,9 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   private async fetchModels(cancellation: vscode.CancellationToken): Promise<CodexModelMetadata[]> {
-    const response = await this.sendWithAuthRetry((credentials) => this.sendModelsRequest(credentials, cancellation));
+    const response = await this.transport.sendModels(cancellation);
     if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
     return parseCodexModelsPayload(await response.json());
-  }
-
-  private sendModelsRequest(
-    credentials: OAuthCredentials,
-    cancellation: vscode.CancellationToken,
-  ): Promise<Response> {
-    return this.fetchWithCancellation(chatgptCodexModelsUrl(CODEX_MODELS_CLIENT_VERSION), {
-      headers: {
-        ...this.authHeaders(credentials, "application/json"),
-        Originator: OAUTH_ORIGINATOR,
-        Version: CODEX_MODELS_CLIENT_VERSION,
-      },
-    }, cancellation);
-  }
-
-  private sendUsageRequest(credentials: OAuthCredentials): Promise<Response> {
-    return this.fetcher(CHATGPT_CODEX_USAGE_URL, {
-      headers: this.authHeaders(credentials, "application/json"),
-    });
-  }
-
-  private sendResetCreditsRequest(credentials: OAuthCredentials): Promise<Response> {
-    return this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
-      headers: {
-        ...this.authHeaders(credentials, "application/json"),
-        Originator: OAUTH_ORIGINATOR,
-        "OpenAI-Beta": "codex-1",
-      },
-    });
-  }
-
-  private sendResetCreditConsumeRequest(
-    credentials: OAuthCredentials,
-    creditId: string,
-    redeemRequestId: string,
-  ): Promise<Response> {
-    return this.fetcher(CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL, {
-      method: "POST",
-      headers: {
-        ...this.authHeaders(credentials, "application/json"),
-        "Content-Type": "application/json",
-        Originator: OAUTH_ORIGINATOR,
-        "OpenAI-Beta": "codex-1",
-      },
-      body: JSON.stringify(buildResetCreditConsumePayload(creditId, redeemRequestId, credentials.accountId)),
-    });
   }
 
   private captureRequestUsage(raw: Record<string, unknown>, modelId: string): void {
@@ -307,66 +256,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     this.usageEmitter.fire(usage);
   }
 
-  private sendRequest(
-    credentials: OAuthCredentials,
-    body: Record<string, unknown>,
-    cancellation: vscode.CancellationToken,
-  ): Promise<Response> {
-    const promptCacheKey = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : undefined;
-    // Cache-aware requests share routing affinity; requests without a key still get isolated transport IDs.
-    const transportHeaders = promptCacheKey
-      ? createPromptCacheTransportHeaders(promptCacheKey)
-      : { "session-id": randomUUID(), "thread-id": randomUUID() };
-    return this.fetchWithCancellation(CHATGPT_CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        ...this.authHeaders(credentials, "text/event-stream"),
-        "Content-Type": "application/json",
-        Originator: OAUTH_ORIGINATOR,
-        ...transportHeaders,
-      },
-      body: JSON.stringify(body),
-    }, cancellation);
-  }
-
-  private async sendWithAuthRetry(
-    request: (credentials: OAuthCredentials) => Promise<Response>,
-  ): Promise<Response> {
-    let response = await request(await this.oauth.getAccessToken());
-    if (response.status === 401) {
-      // Refresh once for an expired token, but avoid retry loops on a persistent authorization failure.
-      response = await request(await this.oauth.getAccessToken(true));
-    }
-    return response;
-  }
-
-  private authHeaders(credentials: OAuthCredentials, accept: string): Record<string, string> {
-    return {
-      Authorization: `Bearer ${credentials.token}`,
-      Accept: accept,
-      "User-Agent": this.userAgent,
-      ...(credentials.accountId ? { "ChatGPT-Account-ID": credentials.accountId } : {}),
-    };
-  }
-
-  private async fetchWithCancellation(
-    url: string,
-    init: RequestInit,
-    cancellation: vscode.CancellationToken,
-  ): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutSeconds = Math.max(10, configuration().get("requestTimeoutSeconds", 600));
-    const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
-    const listener = cancellation.onCancellationRequested(() => controller.abort());
-    if (cancellation.isCancellationRequested) controller.abort();
-    try {
-      // Timeout and VS Code cancellation share one signal so every network path tears down consistently.
-      return await this.fetcher(url, { ...init, signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-      listener.dispose();
-    }
-  }
 }
 
 function configuration(): vscode.WorkspaceConfiguration {
@@ -401,162 +290,4 @@ function explicitConfigurationValue<T>(config: vscode.WorkspaceConfiguration, ke
     ?? inspected?.workspaceValue
     ?? inspected?.globalLanguageValue
     ?? inspected?.globalValue;
-}
-
-function buildRequest(
-  model: string,
-  messages: readonly vscode.LanguageModelChatRequestMessage[],
-  options: vscode.ProvideLanguageModelChatResponseOptions,
-  requestOptions: ModelRequestOptions,
-  supportsParallelToolCalls: boolean,
-  supportsReasoningSummaryParameter: boolean,
-): Record<string, unknown> {
-  const tools = (options.tools ?? []).map((tool) => ({
-    type: "function",
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.inputSchema && typeof tool.inputSchema === "object" ? tool.inputSchema : { type: "object", properties: {} },
-    strict: false,
-  }));
-  const nativeTools = buildNativeTools(requestOptions);
-  const allTools = [...nativeTools, ...tools];
-  const convertedInput = messages.flatMap(convertMessage);
-  const input = convertedInput.length
-    ? convertedInput
-    : [{ type: "message", role: "user", content: [{ type: "input_text", text: "" }] }];
-  const promptCache = buildPromptCacheRequestFields({
-    model,
-    instructions: DEFAULT_INSTRUCTIONS,
-    tools: allTools,
-    input,
-  });
-  return applyModelRequestOptions({
-    model,
-    instructions: DEFAULT_INSTRUCTIONS,
-    ...promptCache,
-    store: false,
-    stream: true,
-    include: ["reasoning.encrypted_content"],
-    ...(allTools.length ? {
-      tools: allTools,
-      tool_choice: options.toolMode === vscode.LanguageModelChatToolMode.Required ? "required" : "auto",
-      parallel_tool_calls: supportsParallelToolCalls,
-    } : {}),
-  }, requestOptions, supportsReasoningSummaryParameter);
-}
-
-function convertMessage(message: vscode.LanguageModelChatRequestMessage): InputItem[] {
-  const assistant = message.role === vscode.LanguageModelChatMessageRole.Assistant;
-  const content: Array<Record<string, unknown>> = [];
-  const extra: InputItem[] = [];
-  for (const part of message.content) {
-    if (part instanceof vscode.LanguageModelTextPart && part.value) {
-      content.push({ type: assistant ? "output_text" : "input_text", text: part.value });
-    } else if (part instanceof vscode.LanguageModelDataPart && part.mimeType.startsWith("image/")) {
-      content.push({ type: "input_image", detail: "auto", image_url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString("base64")}` });
-    } else if (part instanceof vscode.LanguageModelToolCallPart) {
-      extra.push({ type: "function_call", call_id: part.callId, name: part.name, arguments: JSON.stringify(part.input ?? {}) });
-    } else if (part instanceof vscode.LanguageModelToolResultPart) {
-      extra.push({ type: "function_call_output", call_id: part.callId, output: part.content.map(partText).join("\n") });
-    } else if (part instanceof vscode.LanguageModelThinkingPart) {
-      const encrypted = part.metadata?.encrypted_content ?? part.metadata?.redactedData;
-      if (typeof encrypted === "string") extra.push({ type: "reasoning", summary: [], encrypted_content: encrypted });
-    }
-  }
-  const items: InputItem[] = content.length ? [{ type: "message", role: assistant ? "assistant" : "user", content }] : [];
-  return [...items, ...extra];
-}
-
-async function consumeStream(
-  body: ReadableStream<Uint8Array>,
-  progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
-  token: vscode.CancellationToken,
-  onUsage?: (usage: Record<string, unknown>) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const parser = new ResponsesStreamParser();
-  while (true) {
-    if (token.isCancellationRequested) {
-      await reader.cancel();
-      return;
-    }
-    const result = await reader.read();
-    if (result.done) break;
-    for (const event of parser.push(decoder.decode(result.value, { stream: true }))) {
-      reportEvent(event, progress);
-      if (event.usage) onUsage?.(event.usage);
-    }
-  }
-  for (const event of parser.finish()) {
-    reportEvent(event, progress);
-    if (event.usage) onUsage?.(event.usage);
-  }
-}
-
-function reportEvent(event: CodexStreamEvent, progress: vscode.Progress<vscode.LanguageModelResponsePart2>): void {
-  if (event.error) throw new Error(event.error);
-  if (event.text) progress.report(new vscode.LanguageModelTextPart(event.text));
-  if (event.reasoning) {
-    const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: typeof vscode.LanguageModelThinkingPart }).LanguageModelThinkingPart;
-    if (ThinkingPart) progress.report(new ThinkingPart(event.reasoning));
-  }
-  if (event.reasoningBoundary) {
-    const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: typeof vscode.LanguageModelThinkingPart }).LanguageModelThinkingPart;
-    if (ThinkingPart) progress.report(new ThinkingPart("", "", { vscode_reasoning_done: true }));
-  }
-  if (event.encryptedReasoning) {
-    const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: typeof vscode.LanguageModelThinkingPart }).LanguageModelThinkingPart;
-    if (ThinkingPart) progress.report(new ThinkingPart([], event.encryptedReasoning.id, {
-      encrypted_content: event.encryptedReasoning.data,
-      redactedData: event.encryptedReasoning.data,
-    }));
-  }
-  if (event.toolCall) {
-    progress.report(new vscode.LanguageModelToolCallPart(event.toolCall.id, event.toolCall.name, parseArguments(event.toolCall.arguments)));
-  }
-  if (event.webSearchCall) {
-    reportDataPart(progress, "web-search", event.webSearchCall);
-  }
-  if (event.webSearchAnnotation) {
-    reportDataPart(progress, "web-search-annotation", event.webSearchAnnotation);
-  }
-  if (event.imageGenerationCall) {
-    if (event.imageGenerationCall.status === "failed") throw new Error("Codex image generation failed");
-    if (event.imageGenerationCall.result) {
-      const image = decodeGeneratedImage(event.imageGenerationCall.result);
-      progress.report(vscode.LanguageModelDataPart.image(image.data, image.mimeType));
-    }
-  }
-  if (event.usage) {
-    const usage = toProviderUsagePayload(event.usage);
-    if (usage) progress.report(new vscode.LanguageModelDataPart(new TextEncoder().encode(JSON.stringify(usage)), "usage"));
-  }
-}
-
-function reportDataPart(
-  progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
-  kind: string,
-  value: Record<string, unknown>,
-): void {
-  progress.report(new vscode.LanguageModelDataPart(
-    new TextEncoder().encode(JSON.stringify({ kind, ...value })),
-    "application/vnd.openai.web-search+json",
-  ));
-}
-
-function parseArguments(value: string): object {
-  try {
-    const parsed: unknown = JSON.parse(value || "{}");
-    return parsed && typeof parsed === "object" ? parsed as object : { value: parsed };
-  } catch {
-    return { value };
-  }
-}
-
-function partText(part: vscode.LanguageModelInputPart | unknown): string {
-  if (part instanceof vscode.LanguageModelTextPart) return part.value;
-  if (part instanceof vscode.LanguageModelToolCallPart) return JSON.stringify(part.input ?? {});
-  if (part instanceof vscode.LanguageModelToolResultPart) return part.content.map(partText).join("\n");
-  return typeof part === "string" ? part : "";
 }

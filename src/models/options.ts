@@ -6,9 +6,9 @@ import {
   type ReasoningEffort,
   type ReasoningSummary,
   type SpeedMode,
-} from "./model-catalog";
+} from "./catalog";
 
-export type { ReasoningEffort, ReasoningSummary, SpeedMode } from "./model-catalog";
+export type { ReasoningEffort, ReasoningSummary, SpeedMode } from "./catalog";
 
 /** Capabilities used to build a model's configuration controls. */
 export interface ModelOptionSpec {

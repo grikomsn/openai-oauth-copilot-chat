@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decodeGeneratedImage } from "./image-data";
+import { decodeGeneratedImage } from "./image-generation";
 
 test("decodes a PNG result and detects its MIME type", () => {
   const result = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64");

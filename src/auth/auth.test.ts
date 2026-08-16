@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type * as vscode from "vscode";
-import { decodeJwt, OpenAIOAuth, parseCallback } from "./oauth";
-import { OAUTH_ORIGINATOR } from "./protocol";
+import { decodeJwt, OpenAIOAuth, parseCallback } from "./auth";
+import { OAUTH_ORIGINATOR } from "../transport/protocol";
 
 test("parses OAuth callback URLs", () => {
   assert.deepEqual(parseCallback("http://localhost:1455/auth/callback?code=abc&state=xyz"), {

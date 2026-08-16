@@ -96,6 +96,7 @@ selected in the model picker. Generated images are returned directly in the chat
 response; the backend must support the hosted Responses image-generation tool.
 
 - `openaiCodex.requestTimeoutSeconds`: total request timeout
+- `openaiCodex.catalogCacheMinutes`: how long the live model catalog is reused before refreshing
 - `openaiCodex.debugLogging`: request metadata only; prompts and tokens are never logged
 - `openaiCodex.showUsageStatusBar`: show or hide the Codex quota/token indicator
 

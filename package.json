@@ -122,6 +122,12 @@
           "minimum": 10,
           "description": "Maximum duration of a Codex request in seconds."
         },
+        "openaiCodex.catalogCacheMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "description": "How long the live Codex model catalog is reused before refreshing."
+        },
         "openaiCodex.debugLogging": {
           "type": "boolean",
           "default": false,

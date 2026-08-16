@@ -51,6 +51,7 @@ async function manage(
   else if (picked.action === "logs") output.show(true);
   else if (picked.action === "signout") {
     await oauth.signOut();
+    provider.clearModelCache();
     provider.clearUsage();
     usageStatus.hide();
     provider.fireDidChange();
@@ -70,6 +71,7 @@ async function browserSignIn(oauth: OpenAIOAuth, provider: OpenAICodexProvider, 
         try { await attempt?.completion; } finally { listener.dispose(); }
       },
     );
+    provider.clearModelCache();
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-sign-in");
     vscode.window.showInformationMessage("Signed in to Codex Bridge with ChatGPT.");
@@ -91,6 +93,7 @@ async function manualSignIn(oauth: OpenAIOAuth, provider: OpenAICodexProvider, o
     });
     if (!callback) return;
     await oauth.completeAuthorization(callback, flow);
+    provider.clearModelCache();
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-sign-in");
     vscode.window.showInformationMessage("Signed in to Codex Bridge with ChatGPT.");
@@ -108,6 +111,7 @@ async function importCodexSession(oauth: OpenAIOAuth, provider: OpenAICodexProvi
     );
     if (confirmed !== "Import session") return;
     const session = await oauth.importCodexCliSession();
+    provider.clearModelCache();
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-import");
     vscode.window.showInformationMessage(`Imported Codex CLI session${session.email ? ` for ${session.email}` : ""}.`);

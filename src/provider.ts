@@ -31,6 +31,7 @@ import {
   type CodexUsageSnapshot,
 } from "./usage/domain";
 import { CodexTransport } from "./transport/client";
+import { CatalogCache } from "./models/catalog-cache";
 
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
@@ -59,10 +60,12 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   readonly onDidChangeUsage = this.usageEmitter.event;
   private usage: CodexUsageSnapshot;
   private lastQuotaFetchAt = 0;
+  private readonly modelCache = new CatalogCache<CodexModelMetadata[]>();
+  private modelCacheAccount: string | undefined;
   private readonly transport: CodexTransport;
 
   constructor(
-    oauth: OpenAIOAuth,
+    private readonly oauth: OpenAIOAuth,
     private readonly output: vscode.OutputChannel,
     userAgent: string,
     initialUsage: CodexUsageSnapshot = {},
@@ -79,6 +82,11 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   fireDidChange(): void {
     this.changeEmitter.fire();
+  }
+
+  clearModelCache(): void {
+    this.modelCache.clear();
+    this.modelCacheAccount = undefined;
   }
 
   getUsageSnapshot(): CodexUsageSnapshot {
@@ -147,7 +155,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    // Each refresh can change capabilities, defaults, and the available Speed Mode toggle.
     const models = expandCodexModelVariants(await this.fetchModels(token));
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
@@ -237,9 +244,19 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   private async fetchModels(cancellation: vscode.CancellationToken): Promise<CodexModelMetadata[]> {
-    const response = await this.transport.sendModels(cancellation);
-    if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
-    return parseCodexModelsPayload(await response.json());
+    const maxAge = Math.max(1, configuration().get("catalogCacheMinutes", 5)) * 60_000;
+    const session = await this.oauth.sessionInfo();
+    const account = session?.accountId ?? session?.email;
+    if (!account || account !== this.modelCacheAccount) this.clearModelCache();
+    const models = await this.modelCache.getOrRefresh(maxAge, async () => {
+      const response = await this.transport.sendModels(cancellation);
+      if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
+      const parsed = parseCodexModelsPayload(await response.json());
+      if (!parsed.length) throw new Error("OpenAI Codex returned no usable models");
+      return parsed;
+    }, () => cancellation.isCancellationRequested);
+    this.modelCacheAccount = account;
+    return models;
   }
 
   private captureRequestUsage(raw: Record<string, unknown>, modelId: string): void {

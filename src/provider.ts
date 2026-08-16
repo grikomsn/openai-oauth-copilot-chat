@@ -59,6 +59,8 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   readonly onDidChangeUsage = this.usageEmitter.event;
   private usage: CodexUsageSnapshot;
   private lastQuotaFetchAt = 0;
+  private lastModelRefreshAt = 0;
+  private cachedModels: CodexModelMetadata[] | undefined;
   private readonly transport: CodexTransport;
 
   constructor(
@@ -147,7 +149,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    // Each refresh can change capabilities, defaults, and the available Speed Mode toggle.
     const models = expandCodexModelVariants(await this.fetchModels(token));
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
@@ -237,9 +238,21 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   private async fetchModels(cancellation: vscode.CancellationToken): Promise<CodexModelMetadata[]> {
+    const maxAge = Math.max(1, configuration().get("catalogCacheMinutes", 5)) * 60_000;
+    if (this.cachedModels && Date.now() - this.lastModelRefreshAt < maxAge) return this.cachedModels;
     const response = await this.transport.sendModels(cancellation);
-    if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
-    return parseCodexModelsPayload(await response.json());
+    if (!response.ok) {
+      if (this.cachedModels) return this.cachedModels;
+      throw await responseError("Unable to load OpenAI Codex models", response);
+    }
+    const models = parseCodexModelsPayload(await response.json());
+    if (!models.length) {
+      if (this.cachedModels) return this.cachedModels;
+      throw new Error("OpenAI Codex returned no usable models");
+    }
+    this.cachedModels = models;
+    this.lastModelRefreshAt = Date.now();
+    return models;
   }
 
   private captureRequestUsage(raw: Record<string, unknown>, modelId: string): void {

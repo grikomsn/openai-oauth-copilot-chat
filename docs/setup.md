@@ -26,6 +26,10 @@ prettified display names, descriptions, context windows, capabilities, reasoning
 efforts, and Fast availability from the catalog response. Upstream hidden models are
 not registered.
 
+`openaiCodex.catalogCacheMinutes` controls how long the last successful catalog is
+reused before the next discovery request. If a refresh fails, the last usable catalog
+remains available.
+
 After sign-in, the **Codex** status-bar item shows ChatGPT subscription utilization for the primary and secondary quota windows. Click it to refresh quota, inspect reset times, or view exact input/output tokens from the most recent inference. Those normalized token counts are also reported to Copilot Chat so its context-window percentage reflects real usage.
 
 ## Browser callback problems

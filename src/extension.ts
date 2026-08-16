@@ -36,7 +36,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("openaiCodex.reasoningSummary")
         || event.affectsConfiguration("openaiCodex.reasoningEffort")
-        || event.affectsConfiguration("openaiCodex.speedMode")) {
+        || event.affectsConfiguration("openaiCodex.speedMode")
+        || event.affectsConfiguration("openaiCodex.catalogCacheMinutes")) {
         provider.fireDidChange();
       }
       if (event.affectsConfiguration("openaiCodex.showUsageStatusBar")) updateUsageStatusVisibility(usageStatus);

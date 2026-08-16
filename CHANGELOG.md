@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+### Minor Changes
+
+- d735745: Add configurable caching for the live Codex model catalog, with last-known-good model metadata retained when refreshes fail.
+
 ## 0.7.0
 
 ### Minor Changes

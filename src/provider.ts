@@ -17,6 +17,7 @@ import {
   parseCodexModelsPayload,
   type CodexModelMetadata,
 } from "./model-catalog";
+import { decodeGeneratedImage } from "./image-data";
 import { buildNativeTools } from "./native-tools";
 import { OpenAIOAuth } from "./oauth";
 import { buildPromptCacheRequestFields, createPromptCacheTransportHeaders } from "./prompt-cache";
@@ -197,7 +198,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
 
     if (configuration().get("debugLogging", false)) {
-      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} initiator=${options.requestInitiator ?? "unknown"}`);
+      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} imageGeneration=${requestOptions.imageGeneration} initiator=${options.requestInitiator ?? "unknown"}`);
     }
     await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId));
     if (Date.now() - this.lastQuotaFetchAt > 60_000) {
@@ -519,6 +520,13 @@ function reportEvent(event: CodexStreamEvent, progress: vscode.Progress<vscode.L
   }
   if (event.webSearchAnnotation) {
     reportDataPart(progress, "web-search-annotation", event.webSearchAnnotation);
+  }
+  if (event.imageGenerationCall) {
+    if (event.imageGenerationCall.status === "failed") throw new Error("Codex image generation failed");
+    if (event.imageGenerationCall.result) {
+      const image = decodeGeneratedImage(event.imageGenerationCall.result);
+      progress.report(vscode.LanguageModelDataPart.image(image.data, image.mimeType));
+    }
   }
   if (event.usage) {
     const usage = toProviderUsagePayload(event.usage);

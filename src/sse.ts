@@ -9,6 +9,7 @@ export interface CodexStreamEvent {
   toolCall?: { id: string; name: string; arguments: string };
   webSearchCall?: { id: string; status?: string; action?: Record<string, unknown> };
   webSearchAnnotation?: Record<string, unknown>;
+  imageGenerationCall?: { id: string; status?: string; result?: string };
   usage?: Record<string, unknown>;
   error?: string;
 }
@@ -24,6 +25,7 @@ export interface CodexStreamEvent {
 export class ResponsesStreamParser {
   private buffer = "";
   private readonly toolArguments = new Map<string, string>();
+  private readonly imageGenerationCalls = new Set<string>();
 
   /**
    * Adds a transport chunk and returns every complete event it contains.
@@ -94,6 +96,10 @@ export class ResponsesStreamParser {
           action: recordField(item, "action"),
         } }];
       }
+      if (item?.type === "image_generation_call") {
+        const imageEvent = imageGenerationEvent(item, this.imageGenerationCalls);
+        return imageEvent ? [imageEvent] : undefined;
+      }
       if (item?.type === "reasoning") {
         const encrypted = stringField(item, "encrypted_content");
         if (encrypted) return [{ encryptedReasoning: { id: stringField(item, "id") ?? `reasoning-${Date.now()}`, data: encrypted } }];
@@ -101,8 +107,19 @@ export class ResponsesStreamParser {
     }
     if (type === "response.completed") {
       const response = recordField(value, "response");
+      const events: CodexStreamEvent[] = [];
+      const output = response?.output;
+      if (Array.isArray(output)) {
+        for (const item of output) {
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            const imageEvent = imageGenerationEvent(item as Record<string, unknown>, this.imageGenerationCalls);
+            if (imageEvent) events.push(imageEvent);
+          }
+        }
+      }
       const usage = recordField(response ?? {}, "usage");
-      return usage ? [{ usage }] : undefined;
+      if (usage) events.push({ usage });
+      return events.length ? events : undefined;
     }
     if (type === "error" || type === "response.failed") {
       const error = recordField(value, "error") ?? recordField(recordField(value, "response") ?? {}, "error");
@@ -119,4 +136,17 @@ function recordField(value: Record<string, unknown>, key: string): Record<string
 
 function stringField(value: Record<string, unknown>, key: string): string | undefined {
   return typeof value[key] === "string" ? value[key] as string : undefined;
+}
+
+function imageGenerationEvent(
+  item: Record<string, unknown>,
+  emitted: Set<string>,
+): CodexStreamEvent | undefined {
+  const id = stringField(item, "id") ?? `image-generation-${Date.now()}`;
+  const status = stringField(item, "status");
+  const result = stringField(item, "result");
+  if (!result && status !== "failed") return undefined;
+  if (emitted.has(id)) return undefined;
+  emitted.add(id);
+  return { imageGenerationCall: { id, status, ...(result ? { result } : {}) } };
 }

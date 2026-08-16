@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const CODEX_RELEASES_API_URL = "https://api.github.com/repos/openai/codex/releases/latest";
-const PROTOCOL_PATH = new URL("../src/protocol.ts", import.meta.url);
+const PROTOCOL_PATH = new URL("../src/transport/protocol.ts", import.meta.url);
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 function parseCodexReleaseVersion(payload) {

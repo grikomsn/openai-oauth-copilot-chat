@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildResetCreditConsumePayload,
-  formatUsageStatusBar,
-  formatUsageRows,
   mergeQuotaPayload,
   mergeResetCreditsPayload,
   parseResetCreditConsumePayload,
   recordRequestUsage,
   toProviderUsagePayload,
   usageSnapshotForPersistence,
-} from "./usage";
+} from "./domain";
+import { formatUsageRows, formatUsageStatusBar } from "./presentation";
 
 test("normalizes Responses API usage for Copilot inference reporting", () => {
   assert.deepEqual(toProviderUsagePayload({

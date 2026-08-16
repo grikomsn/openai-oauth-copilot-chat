@@ -6,7 +6,7 @@ import {
   modelOptionSpec,
   resolveModelRequestOptions,
   type ModelOptionSpec,
-} from "./model-options";
+} from "./options";
 
 const spec: ModelOptionSpec = {
   efforts: ["medium", "adaptive"],

@@ -1,9 +1,8 @@
-/** OpenAI-hosted Responses tools enabled by model-picker options. */
+/** Server-executed tools understood by the ChatGPT Codex Responses backend. */
 
-import type { ModelRequestOptions } from "./model-options";
+import type { ModelRequestOptions } from "../models/options";
 
-/** Builds the provider-owned native tool descriptors for one request. */
-export function buildNativeTools(
+export function buildHostedTools(
   options: Pick<ModelRequestOptions, "webSearch" | "imageGeneration">,
 ): Record<string, unknown>[] {
   return [

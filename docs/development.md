@@ -12,13 +12,14 @@ The following implementations have focused colocated `node:test` coverage in `sr
 
 | Area | Implementation | Tests |
 | --- | --- | --- |
-| Model catalog | [`model-catalog.ts`](../src/model-catalog.ts) | [`model-catalog.test.ts`](../src/model-catalog.test.ts) |
-| Model options | [`model-options.ts`](../src/model-options.ts) | [`model-options.test.ts`](../src/model-options.test.ts) |
-| OAuth | [`oauth.ts`](../src/oauth.ts) | [`oauth.test.ts`](../src/oauth.test.ts) |
-| Prompt cache | [`prompt-cache.ts`](../src/prompt-cache.ts) | [`prompt-cache.test.ts`](../src/prompt-cache.test.ts) |
-| Protocol identity | [`protocol.ts`](../src/protocol.ts) | [`protocol.test.ts`](../src/protocol.test.ts) |
-| Responses streaming | [`sse.ts`](../src/sse.ts) | [`sse.test.ts`](../src/sse.test.ts) |
-| Usage tracking | [`usage.ts`](../src/usage.ts) | [`usage.test.ts`](../src/usage.test.ts) |
+| Model catalog | [`catalog.ts`](../src/models/catalog.ts) | [`catalog.test.ts`](../src/models/catalog.test.ts) |
+| Model options | [`options.ts`](../src/models/options.ts) | [`options.test.ts`](../src/models/options.test.ts) |
+| OAuth | [`auth.ts`](../src/auth/auth.ts) | [`auth.test.ts`](../src/auth/auth.test.ts) |
+| Prompt cache | [`prompt-cache.ts`](../src/features/prompt-cache.ts) | [`prompt-cache.test.ts`](../src/features/prompt-cache.test.ts) |
+| Protocol identity | [`protocol.ts`](../src/transport/protocol.ts) | [`protocol.test.ts`](../src/transport/protocol.test.ts) |
+| Responses streaming | [`responses.ts`](../src/transport/responses.ts) | [`responses.test.ts`](../src/transport/responses.test.ts) |
+| Usage domain | [`domain.ts`](../src/usage/domain.ts) | [`domain.test.ts`](../src/usage/domain.test.ts) |
+| Usage presentation | [`presentation.ts`](../src/usage/presentation.ts) | [`presentation.test.ts`](../src/usage/presentation.test.ts) |
 
 The VS Code integration entry points remain [`extension.ts`](../src/extension.ts)
 and [`provider.ts`](../src/provider.ts); their behavior is exercised through the

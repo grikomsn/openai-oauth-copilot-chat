@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expandCodexModelVariants, formatCodexDisplayName, parseCodexModelsPayload } from "./model-catalog";
+import { expandCodexModelVariants, formatCodexDisplayName, parseCodexModelsPayload } from "./catalog";
 
 test("maps the visible remote catalog metadata", () => {
   const models = parseCodexModelsPayload({

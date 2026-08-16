@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import type * as vscode from "vscode";
-import { responseError } from "./errors";
+import { responseError } from "../errors";
 import {
   EXTENSION_DISPLAY_NAME,
   OAUTH_ORIGINATOR,
@@ -14,7 +14,7 @@ import {
   OPENAI_OAUTH_CLIENT_ID,
   OPENAI_REDIRECT_URI,
   OPENAI_TOKEN_URL,
-} from "./protocol";
+} from "../transport/protocol";
 
 const CALLBACK_PORT = 1455;
 const CALLBACK_PATH = "/auth/callback";

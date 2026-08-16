@@ -51,3 +51,16 @@ test("clearing the cache forces the next refresh", async () => {
 
   assert.equal(loads, 2);
 });
+
+test("does not publish a load that started before cache invalidation", async () => {
+  let resolveOld: ((value: string[]) => void) | undefined;
+  const cache = new CatalogCache<string[]>();
+  const oldLoad = cache.getOrRefresh(100_000, () => new Promise<string[]>((resolve) => {
+    resolveOld = resolve;
+  }));
+
+  cache.clear();
+  resolveOld!(["old-account"]);
+  await assert.rejects(oldLoad, /invalidated during refresh/);
+  assert.deepEqual(await cache.getOrRefresh(100_000, async () => ["new-account"]), ["new-account"]);
+});

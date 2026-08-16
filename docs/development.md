@@ -2,11 +2,12 @@
 
 ## Architecture
 
-The extension has three small layers:
+The extension is organized around responsibility-based modules:
 
-- `oauth.ts` performs PKCE authorization, refresh, local callback handling, and secure-session persistence.
-- `provider.ts` translates VS Code language-model messages and tools into stateless OpenAI Responses input items.
-- `sse.ts` incrementally parses Responses API events into VS Code text, thinking, usage, and tool-call parts.
+- `auth/auth.ts` performs PKCE authorization, refresh, local callback handling, and secure-session persistence.
+- `provider.ts` is the VS Code language-model provider facade; conversion and response projection live in `provider/`.
+- `transport/` owns authenticated HTTP requests, protocol identity, and incremental Responses API parsing.
+- `tools/` distinguishes caller-executed VS Code tools from server-executed OpenAI hosted tools.
 
 The following implementations have focused colocated `node:test` coverage in `src/`:
 
@@ -27,7 +28,7 @@ Extension Development Host because both depend on the VS Code runtime.
 
 The ChatGPT Codex endpoint requires a bearer token plus the ChatGPT account ID extracted from OAuth JWT claims. Requests use `store: false` and send full conversation history. The provider derives a privacy-safe `prompt_cache_key` and matching cache-affinity `session-id` from the model, tools, instructions, and first user message, so both remain stable across normal chat turns, agent tool loops, and retries without storing prompt text locally. Each stateless backend request receives a fresh `thread-id`, preventing independent VS Code conversations with the same cache prefix from sharing a backend thread identity. The ChatGPT backend currently rejects the public Responses API's explicit `prompt_cache_options` and `prompt_cache_breakpoint` fields, so requests rely on the backend's automatic cache policy with the stable routing key.
 
-Shared protocol constants live in `protocol.ts`. OAuth and inference requests must use the extension originator and user agent defined there; do not identify requests as the official Codex CLI or OpenAI VS Code extension. The OAuth client and ChatGPT backend are undocumented integration surfaces and may change without notice.
+Shared protocol constants live in [`src/transport/protocol.ts`](../src/transport/protocol.ts). OAuth and inference requests must use the extension originator and user agent defined there; do not identify requests as the official Codex CLI or OpenAI VS Code extension. The OAuth client and ChatGPT backend are undocumented integration surfaces and may change without notice.
 
 ## Local workflow
 

@@ -8,14 +8,15 @@
 
 ## Code map
 
-- `src/extension.ts`: activation, commands, UI, diagnostics, and usage status.
+- `src/extension.ts`: activation and dependency wiring.
+- `src/commands/`: commands, account UI, diagnostics, and usage workflows.
 - `src/auth/auth.ts`: PKCE sign-in, refresh, callback handling, and secret persistence.
 - `src/provider.ts`: VS Code chat-provider integration and Responses API translation.
 - `src/transport/responses.ts`: incremental SSE parsing into text, reasoning, tool-call, and usage events.
 - `src/models/options.ts`: per-model speed/reasoning capabilities and request options.
 - `src/usage/`: quota parsing, local usage tracking, and display formatting.
 - `src/transport/protocol.ts`: shared endpoints and request identity constants.
-- Tests are colocated as `src/*.test.ts`; `out/` and `*.vsix` are generated artifacts.
+- Tests are colocated as `src/**/*.test.ts`; `out/` and `*.vsix` are generated artifacts.
 
 ## Commands
 

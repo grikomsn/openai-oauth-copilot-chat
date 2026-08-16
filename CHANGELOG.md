@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+### Minor Changes
+
+- 7969ef9: Add opt-in native image generation through the Codex Responses provider, including streamed image output in Copilot Chat.
+
 ## 0.6.0
 
 ### Minor Changes

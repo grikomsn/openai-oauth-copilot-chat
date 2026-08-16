@@ -20,7 +20,7 @@ This extension is a native VS Code `LanguageModelChatProvider`. It handles OpenA
 - ChatGPT OAuth with PKCE and automatic access-token refresh
 - Models discovered from the live Codex catalog for the signed-in ChatGPT account
 - Streaming responses, reasoning summaries, images, and tool calling
-- Per-model reasoning effort, opt-in Web Search, and Speed Mode controls
+- Per-model reasoning effort, opt-in Web Search, Image Generation, and Speed Mode controls
 - Native Copilot context-window accounting from Codex inference token usage
 - Automatic OpenAI prompt-cache reuse for eligible prefixes across normal chat turns and agent tool loops
 - Status-bar indicator for five-hour/weekly ChatGPT Codex quota and locally tracked tokens
@@ -36,6 +36,10 @@ Every model also exposes an opt-in **Web Search** control beside its reasoning
 controls. It is disabled by default; when enabled, the request includes the
 Codex Responses API's hosted `web_search` tool and preserves streamed search
 annotations as provider data.
+The **Image Generation** control is also disabled by default; when enabled, the
+request includes the hosted `image_generation` tool and streams generated image
+data back into Copilot Chat. Availability depends on the signed-in Codex backend
+and selected model accepting that hosted tool.
 
 Context limits follow Codex's own runtime policy: the catalog's effective-window
 percentage defines the usable hard window, while its auto-compaction threshold defines
@@ -87,6 +91,9 @@ Models that accept `reasoning.summary` also expose a per-model summary control; 
 selection overrides the workspace default.
 **Web Search** is an independent per-model toggle and remains disabled unless selected
 in the model picker.
+**Image Generation** is an independent per-model toggle and remains disabled unless
+selected in the model picker. Generated images are returned directly in the chat
+response; the backend must support the hosted Responses image-generation tool.
 
 - `openaiCodex.requestTimeoutSeconds`: total request timeout
 - `openaiCodex.debugLogging`: request metadata only; prompts and tokens are never logged

@@ -27,6 +27,7 @@ export interface ModelRequestOptions {
   reasoningEffort: ReasoningEffort;
   reasoningSummary: ReasoningSummary;
   webSearch: boolean;
+  imageGeneration: boolean;
 }
 
 /**
@@ -90,6 +91,8 @@ export function resolveModelRequestOptions(
     ?? parseConfiguredSummary(stringOption(workspaceDefaults, "reasoningSummary"));
   const requestedWebSearch = booleanOption(requestConfiguration, "webSearch")
     ?? booleanOption(workspaceDefaults, "webSearch");
+  const requestedImageGeneration = booleanOption(requestConfiguration, "imageGeneration")
+    ?? booleanOption(workspaceDefaults, "imageGeneration");
   const requestedSpeed = parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
     ?? legacyMode?.speedMode
     ?? parseConfiguredSpeed(stringOption(workspaceDefaults, "speedMode"));
@@ -102,6 +105,7 @@ export function resolveModelRequestOptions(
       ? spec.defaultReasoningSummary
       : requestedSummary,
     webSearch: requestedWebSearch ?? false,
+    imageGeneration: requestedImageGeneration ?? false,
     speedMode: speedMode === "fast"
       ? "fast"
       : spec.supportsFast && requestedSpeed === "fast" ? "fast" : "normal",
@@ -155,6 +159,13 @@ export function buildModelConfigurationSchema(
         title: "Web Search",
         description: "Allow Codex to use OpenAI-hosted web search for this model.",
         default: defaults?.webSearch ?? false,
+        group: "navigation",
+      },
+      imageGeneration: {
+        type: "boolean",
+        title: "Image Generation",
+        description: "Allow Codex to use OpenAI-hosted image generation for this model.",
+        default: defaults?.imageGeneration ?? false,
         group: "navigation",
       },
       ...(exposesSpeedMode ? {

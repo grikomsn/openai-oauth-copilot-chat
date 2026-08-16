@@ -9,7 +9,6 @@ export interface CodexStreamEvent {
   toolCall?: { id: string; name: string; arguments: string };
   webSearchCall?: { id: string; status?: string; action?: Record<string, unknown> };
   webSearchAnnotation?: Record<string, unknown>;
-  imageGenerationPartial?: { index: number; result: string };
   imageGenerationCall?: { id: string; status?: string; result?: string };
   usage?: Record<string, unknown>;
   error?: string;
@@ -83,11 +82,6 @@ export class ResponsesStreamParser {
       const annotation = recordField(value, "annotation");
       return annotation ? [{ webSearchAnnotation: annotation }] : undefined;
     }
-    if (type === "response.image_generation_call.partial_image") {
-      const result = stringField(value, "partial_image_b64");
-      const index = numberField(value, "partial_image_index");
-      return result && index !== undefined ? [{ imageGenerationPartial: { index, result } }] : undefined;
-    }
     if (type === "response.output_item.done") {
       const item = recordField(value, "item");
       if (item?.type === "function_call") {
@@ -142,10 +136,6 @@ function recordField(value: Record<string, unknown>, key: string): Record<string
 
 function stringField(value: Record<string, unknown>, key: string): string | undefined {
   return typeof value[key] === "string" ? value[key] as string : undefined;
-}
-
-function numberField(value: Record<string, unknown>, key: string): number | undefined {
-  return typeof value[key] === "number" ? value[key] as number : undefined;
 }
 
 function imageGenerationEvent(

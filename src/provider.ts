@@ -521,10 +521,6 @@ function reportEvent(event: CodexStreamEvent, progress: vscode.Progress<vscode.L
   if (event.webSearchAnnotation) {
     reportDataPart(progress, "web-search-annotation", event.webSearchAnnotation);
   }
-  if (event.imageGenerationPartial) {
-    const image = decodeGeneratedImage(event.imageGenerationPartial.result);
-    progress.report(vscode.LanguageModelDataPart.image(image.data, image.mimeType));
-  }
   if (event.imageGenerationCall) {
     if (event.imageGenerationCall.status === "failed") throw new Error("Codex image generation failed");
     if (event.imageGenerationCall.result) {

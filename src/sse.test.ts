@@ -48,17 +48,15 @@ test("preserves hosted web-search calls and citations as data events", () => {
   ]);
 });
 
-test("parses streamed image-generation partials and final output", () => {
+test("parses the final image-generation output and suppresses completed duplicates", () => {
   const parser = new ResponsesStreamParser();
   const result = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
   const events = parser.push([
-    `data: ${JSON.stringify({ type: "response.image_generation_call.partial_image", partial_image_index: 0, partial_image_b64: result })}`,
     `data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "image_generation_call", id: "img1", status: "completed", result } })}`,
     `data: ${JSON.stringify({ type: "response.completed", response: { output: [{ type: "image_generation_call", id: "img1", status: "completed", result }], usage: { total_tokens: 12 } } })}`,
   ].join("\n\n") + "\n\n");
 
   assert.deepEqual(events, [
-    { imageGenerationPartial: { index: 0, result } },
     { imageGenerationCall: { id: "img1", status: "completed", result } },
     { usage: { total_tokens: 12 } },
   ]);

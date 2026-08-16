@@ -31,6 +31,7 @@ import {
   type CodexUsageSnapshot,
 } from "./usage/domain";
 import { CodexTransport } from "./transport/client";
+import { CatalogCache } from "./models/catalog-cache";
 
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
@@ -59,12 +60,12 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   readonly onDidChangeUsage = this.usageEmitter.event;
   private usage: CodexUsageSnapshot;
   private lastQuotaFetchAt = 0;
-  private lastModelRefreshAt = 0;
-  private cachedModels: CodexModelMetadata[] | undefined;
+  private readonly modelCache = new CatalogCache<CodexModelMetadata[]>();
+  private modelCacheAccount: string | undefined;
   private readonly transport: CodexTransport;
 
   constructor(
-    oauth: OpenAIOAuth,
+    private readonly oauth: OpenAIOAuth,
     private readonly output: vscode.OutputChannel,
     userAgent: string,
     initialUsage: CodexUsageSnapshot = {},
@@ -81,6 +82,11 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   fireDidChange(): void {
     this.changeEmitter.fire();
+  }
+
+  clearModelCache(): void {
+    this.modelCache.clear();
+    this.modelCacheAccount = undefined;
   }
 
   getUsageSnapshot(): CodexUsageSnapshot {
@@ -239,19 +245,17 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   private async fetchModels(cancellation: vscode.CancellationToken): Promise<CodexModelMetadata[]> {
     const maxAge = Math.max(1, configuration().get("catalogCacheMinutes", 5)) * 60_000;
-    if (this.cachedModels && Date.now() - this.lastModelRefreshAt < maxAge) return this.cachedModels;
-    const response = await this.transport.sendModels(cancellation);
-    if (!response.ok) {
-      if (this.cachedModels) return this.cachedModels;
-      throw await responseError("Unable to load OpenAI Codex models", response);
-    }
-    const models = parseCodexModelsPayload(await response.json());
-    if (!models.length) {
-      if (this.cachedModels) return this.cachedModels;
-      throw new Error("OpenAI Codex returned no usable models");
-    }
-    this.cachedModels = models;
-    this.lastModelRefreshAt = Date.now();
+    const session = await this.oauth.sessionInfo();
+    const account = session?.accountId ?? session?.email;
+    if (!account || account !== this.modelCacheAccount) this.clearModelCache();
+    const models = await this.modelCache.getOrRefresh(maxAge, async () => {
+      const response = await this.transport.sendModels(cancellation);
+      if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
+      const parsed = parseCodexModelsPayload(await response.json());
+      if (!parsed.length) throw new Error("OpenAI Codex returned no usable models");
+      return parsed;
+    }, () => cancellation.isCancellationRequested);
+    this.modelCacheAccount = account;
     return models;
   }
 

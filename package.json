@@ -2,7 +2,7 @@
   "name": "openai-oauth-copilot-chat",
   "displayName": "Codex Bridge for Copilot Chat",
   "description": "Use OpenAI Codex models in GitHub Copilot Chat with your ChatGPT Plus or Pro subscription.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "grikomsn",
   "license": "MIT",
   "icon": "assets/icon.png",
@@ -53,14 +53,14 @@
         "command": "openaiCodex.importCodexSession",
         "title": "Codex Bridge: Import Codex CLI Session (Advanced)"
       },
-    {
-      "command": "openaiCodex.testConnection",
-      "title": "Codex Bridge: Test Connection"
-    },
-    {
-      "command": "openaiCodex.refreshModels",
-      "title": "Codex Bridge: Refresh Models"
-    },
+      {
+        "command": "openaiCodex.testConnection",
+        "title": "Codex Bridge: Test Connection"
+      },
+      {
+        "command": "openaiCodex.refreshModels",
+        "title": "Codex Bridge: Refresh Models"
+      },
       {
         "command": "openaiCodex.showUsage",
         "title": "Codex Bridge: Show Usage"

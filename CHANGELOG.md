@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0
+
+### Minor Changes
+
+- 48b7243: Add an explicit model refresh command, initialize the usage indicator consistently, and redact account identity from diagnostics.
+
+### Patch Changes
+
+- 48b7243: Enrich the authoritative live Codex model directory with a persisted, stale-while-revalidate models.dev metadata snapshot.
+- 48b7243: Default ordered reasoning controls to High when supported while retaining the live model's supported levels.
+
 ## 0.8.0
 
 ### Minor Changes

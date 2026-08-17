@@ -59,7 +59,7 @@ test("lets a normal model switch to Fast through its configuration", () => {
   });
 });
 
-test("falls back to live model defaults and reads legacy picker values", () => {
+test("falls back to the model option default and reads legacy picker values", () => {
   assert.deepEqual(
     resolveModelRequestOptions(
       spec,
@@ -161,6 +161,22 @@ test("carries the live Fast-tier description into the picker schema", () => {
     "Standard speed and usage",
     "Priority responses",
   ]);
+});
+
+test("defaults ordered reasoning controls to high when the model supports it", () => {
+  const optionSpec = modelOptionSpec({
+    reasoningLevels: [
+      { effort: "low", description: "Lighter reasoning" },
+      { effort: "high", description: "Deeper reasoning" },
+    ],
+    defaultReasoningEffort: "low",
+    supportsFast: false,
+    supportsReasoningSummaryParameter: false,
+    defaultReasoningSummary: "none",
+  });
+
+  assert.equal(optionSpec.defaultEffort, "high");
+  assert.equal(buildModelConfigurationSchema(optionSpec).properties.reasoningEffort.default, "high");
 });
 
 test("omits reasoning summaries when disabled or unsupported", () => {

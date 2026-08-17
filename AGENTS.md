@@ -14,6 +14,7 @@
 - `src/provider.ts`: VS Code chat-provider integration and Responses API translation.
 - `src/transport/responses.ts`: incremental SSE parsing into text, reasoning, tool-call, and usage events.
 - `src/models/options.ts`: per-model speed/reasoning capabilities and request options.
+- `src/models/metadata.ts`: persisted models.dev enrichment for fields omitted by the live model directory.
 - `src/usage/`: quota parsing, local usage tracking, and display formatting.
 - `src/transport/protocol.ts`: shared endpoints and request identity constants.
 - Tests are colocated as `src/**/*.test.ts`; `out/` and `*.vsix` are generated artifacts.

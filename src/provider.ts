@@ -13,6 +13,7 @@ import {
   type SpeedMode,
 } from "./models/options";
 import {
+  enrichCodexModel,
   expandCodexModelVariants,
   parseCodexModelsPayload,
   type CodexModelMetadata,
@@ -32,6 +33,7 @@ import {
 } from "./usage/domain";
 import { CodexTransport } from "./transport/client";
 import { CatalogCache } from "./models/catalog-cache";
+import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
 
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
@@ -63,12 +65,14 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   private readonly modelCache = new CatalogCache<CodexModelMetadata[]>();
   private modelCacheAccount: string | undefined;
   private readonly transport: CodexTransport;
+  private readonly metadata: ModelsDevMetadata;
 
   constructor(
     private readonly oauth: OpenAIOAuth,
     private readonly output: vscode.OutputChannel,
     userAgent: string,
     initialUsage: CodexUsageSnapshot = {},
+    metadataCache: MetadataCache = memoryMetadataCache(),
     fetcher: typeof fetch = fetch,
   ) {
     this.usage = initialUsage;
@@ -78,6 +82,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       () => configuration().get("requestTimeoutSeconds", 600),
       fetcher,
     );
+    this.metadata = new ModelsDevMetadata(metadataCache, fetcher);
   }
 
   fireDidChange(): void {
@@ -87,6 +92,18 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   clearModelCache(): void {
     this.modelCache.clear();
     this.modelCacheAccount = undefined;
+  }
+
+  async refreshModels(): Promise<number> {
+    this.clearModelCache();
+    const cancellation = new vscode.CancellationTokenSource();
+    try {
+      const models = await this.fetchModels(cancellation.token);
+      this.fireDidChange();
+      return expandCodexModelVariants(models).length;
+    } finally {
+      cancellation.dispose();
+    }
   }
 
   getUsageSnapshot(): CodexUsageSnapshot {
@@ -253,7 +270,8 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
       const parsed = parseCodexModelsPayload(await response.json());
       if (!parsed.length) throw new Error("OpenAI Codex returned no usable models");
-      return parsed;
+      const metadata = await this.metadata.getOrRefresh();
+      return parsed.map((model) => enrichCodexModel(model, metadata.models[model.id]));
     }, () => cancellation.isCancellationRequested);
     this.modelCacheAccount = account;
     return models;
@@ -273,6 +291,14 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     this.usageEmitter.fire(usage);
   }
 
+}
+
+function memoryMetadataCache(): MetadataCache {
+  const values = new Map<string, unknown>();
+  return {
+    get<T>(key: string): T | undefined { return values.get(key) as T | undefined; },
+    async update(key: string, value: unknown): Promise<void> { values.set(key, value); },
+  };
 }
 
 function configuration(): vscode.WorkspaceConfiguration {

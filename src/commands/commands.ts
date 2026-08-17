@@ -19,6 +19,7 @@ export function registerCodexCommands(
     vscode.commands.registerCommand("openaiCodex.signInManual", () => manualSignIn(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.importCodexSession", () => importCodexSession(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.testConnection", () => testConnection(provider, output)),
+    vscode.commands.registerCommand("openaiCodex.refreshModels", () => refreshModels(provider, output)),
     vscode.commands.registerCommand("openaiCodex.showUsage", () => showUsage(provider, output)),
     vscode.commands.registerCommand("openaiCodex.diagnostics", () => diagnostics(oauth, output)),
   ];
@@ -34,6 +35,7 @@ async function manage(
   const picked = await vscode.window.showQuickPick(session ? [
     { label: "$(pulse) Show Codex usage", action: "usage" },
     { label: "$(check) Test Codex connection", action: "test" },
+    { label: "$(refresh) Refresh Codex models", action: "refresh" },
     { label: "$(output) Show Codex Bridge logs", action: "logs" },
     { label: "$(sign-out) Sign out of Codex Bridge", action: "signout" },
   ] : [
@@ -48,6 +50,7 @@ async function manage(
   else if (picked.action === "import") await importCodexSession(oauth, provider, output);
   else if (picked.action === "usage") await showUsage(provider, output);
   else if (picked.action === "test") await testConnection(provider, output);
+  else if (picked.action === "refresh") await refreshModels(provider, output);
   else if (picked.action === "logs") output.show(true);
   else if (picked.action === "signout") {
     await oauth.signOut();
@@ -133,6 +136,18 @@ async function testConnection(provider: OpenAICodexProvider, output: vscode.Outp
   }
 }
 
+async function refreshModels(provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
+  try {
+    const count = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: "Refreshing Codex models…" },
+      () => provider.refreshModels(),
+    );
+    vscode.window.showInformationMessage(`Refreshed ${count} Codex models.`);
+  } catch (error) {
+    showError("Codex model refresh failed", error, output);
+  }
+}
+
 async function showUsage(provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
   let snapshot = provider.getUsageSnapshot();
   try {
@@ -206,7 +221,7 @@ async function diagnostics(oauth: OpenAIOAuth, output: vscode.OutputChannel): Pr
   const session = await oauth.sessionInfo();
   const content = [
     `# ${EXTENSION_DISPLAY_NAME} diagnostics`, "", `- VS Code: ${vscode.version}`,
-    `- OAuth session: ${session ? "present" : "missing"}`, `- Account: ${session?.email ?? "unknown"}`,
+    `- OAuth session: ${session ? "present" : "missing"}`, `- Account identity: ${session ? "redacted" : "unavailable"}`,
     `- Registered models: ${models.length}`, "", ...models.map((model) => `- ${model.id} (${model.maxInputTokens} input tokens)`),
   ].join("\n");
   output.appendLine(`[diagnostics] session=${Boolean(session)} models=${models.length}`);

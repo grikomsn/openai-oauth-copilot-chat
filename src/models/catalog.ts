@@ -1,5 +1,7 @@
 /** Model-directory types and normalization for the live Codex picker. */
 
+import type { ModelsDevModelMetadata } from "./metadata";
+
 /** Processing speed requested for a model. */
 export type SpeedMode = "normal" | "fast";
 /** A model-advertised reasoning effort. */
@@ -33,6 +35,8 @@ export interface CodexModelMetadata {
   supportsFast: boolean;
   fastDescription?: string;
   priority: number;
+  releaseDate?: string;
+  lastUpdated?: string;
 }
 
 /** A picker-ready model entry, including its selected speed mode. */
@@ -137,6 +141,24 @@ export function expandCodexModelVariants(models: readonly CodexModelMetadata[]):
  */
 export function formatCodexDisplayName(displayName: string): string {
   return displayName.replaceAll("-", " ").replace(/\s+/g, " ").trim();
+}
+
+export function enrichCodexModel(model: CodexModelMetadata, metadata: ModelsDevModelMetadata | undefined): CodexModelMetadata {
+  if (!metadata) return model;
+  const contextWindow = metadata.contextLength;
+  const output = model.output > 0 ? model.output : Math.min(metadata.maxOutputTokens ?? 0, contextWindow ?? Number.MAX_SAFE_INTEGER);
+  const input = model.input > 0
+    ? model.input
+    : metadata.maxInputTokens ?? Math.max(0, (contextWindow ?? 0) - output);
+  return {
+    ...model,
+    name: model.name || metadata.name || model.id,
+    description: model.description || metadata.description || "",
+    input,
+    output,
+    releaseDate: metadata.releaseDate,
+    lastUpdated: metadata.lastUpdated,
+  };
 }
 
 function parseModel(model: RemoteCodexModel): CodexModelMetadata | undefined {

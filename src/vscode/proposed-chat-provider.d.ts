@@ -9,6 +9,7 @@ declare module "vscode" {
     readonly pricing?: string;
     readonly isUserSelectable?: boolean;
     readonly configurationSchema?: LanguageModelConfigurationSchema;
+    readonly targetChatSessionType?: string;
   }
 
   export interface LanguageModelChatCapabilities {
@@ -16,15 +17,29 @@ declare module "vscode" {
     readonly toolCalling?: boolean | number;
   }
 
-  export type LanguageModelResponsePart2 = LanguageModelResponsePart | LanguageModelDataPart | LanguageModelThinkingPart;
+  export type LanguageModelResponsePart2 =
+    | LanguageModelResponsePart
+    | LanguageModelDataPart
+    | LanguageModelThinkingPart;
 
   export type LanguageModelConfigurationSchema = {
-    readonly type?: string;
-    readonly properties?: { readonly [key: string]: Record<string, unknown> };
+    readonly type?: "object";
+    readonly properties?: {
+      readonly [key: string]: Record<string, unknown> & {
+        readonly enumItemLabels?: string[];
+        readonly enumDescriptions?: string[];
+        readonly group?: string;
+      };
+    };
   };
 
-  export interface LanguageModelChatProvider<T extends LanguageModelChatInformation = LanguageModelChatInformation> {
-    provideLanguageModelChatInformation(options: PrepareLanguageModelChatModelOptions, token: CancellationToken): ProviderResult<T[]>;
+  export interface LanguageModelChatProvider<
+    T extends LanguageModelChatInformation = LanguageModelChatInformation,
+  > {
+    provideLanguageModelChatInformation(
+      options: PrepareLanguageModelChatModelOptions,
+      token: CancellationToken,
+    ): ProviderResult<T[]>;
     provideLanguageModelChatResponse(
       model: T,
       messages: readonly LanguageModelChatRequestMessage[],

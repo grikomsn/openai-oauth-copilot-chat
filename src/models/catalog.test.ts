@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expandCodexModelVariants, formatCodexDisplayName, parseCodexModelsPayload } from "./catalog";
+import { enrichCodexModel, expandCodexModelVariants, formatCodexDisplayName, parseCodexModelsPayload } from "./catalog";
 
 test("maps the visible remote catalog metadata", () => {
   const models = parseCodexModelsPayload({
@@ -132,6 +132,38 @@ test("keeps Fast-capable models in one picker entry", () => {
 test("prettifies catalog labels without replacing the product name", () => {
   assert.equal(formatCodexDisplayName("GPT-5.6-Luna"), "GPT 5.6 Luna");
   assert.equal(formatCodexDisplayName("Codex--Review"), "Codex Review");
+});
+
+test("keeps live Codex metadata authoritative and fills absent models.dev fields", () => {
+  const [live] = parseCodexModelsPayload({ models: [remoteModel()] });
+  const enriched = enrichCodexModel(live, {
+    id: live.id,
+    name: "Metadata Name",
+    description: "Metadata description",
+    contextLength: 999_999,
+    maxOutputTokens: 99_999,
+    releaseDate: "2026-01-01",
+  });
+  assert.equal(enriched.name, "GPT Test");
+  assert.equal(enriched.description, "Test model.");
+  assert.equal(enriched.input, live.input);
+  assert.equal(enriched.output, live.output);
+  assert.equal(enriched.releaseDate, "2026-01-01");
+
+  const missing = enrichCodexModel({ ...live, name: "", description: "", input: 0, output: 0 }, {
+    id: live.id,
+    name: "Metadata Name",
+    description: "Metadata description",
+    contextLength: 200_000,
+    maxInputTokens: 175_000,
+    maxOutputTokens: 20_000,
+  });
+  assert.deepEqual({ name: missing.name, description: missing.description, input: missing.input, output: missing.output }, {
+    name: "Metadata Name",
+    description: "Metadata description",
+    input: 175_000,
+    output: 20_000,
+  });
 });
 
 test("maps default and advertised Codex context limits", () => {

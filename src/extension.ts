@@ -18,11 +18,13 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     extensionUserAgent(version, vscode.version),
     context.globalState.get<CodexUsageSnapshot>(USAGE_STATE_KEY) ?? {},
+    context.globalState,
   );
   const usageStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 91);
   usageStatus.name = "Codex Bridge usage";
   usageStatus.command = "openaiCodex.showUsage";
   renderUsageStatus(usageStatus, provider.getUsageSnapshot());
+  updateUsageStatusVisibility(usageStatus);
   context.subscriptions.push(
     output,
     usageStatus,

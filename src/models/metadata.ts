@@ -9,6 +9,7 @@ export interface ModelsDevModelMetadata {
   readonly description?: string;
   readonly family?: string;
   readonly contextLength?: number;
+  readonly maxInputTokens?: number;
   readonly maxOutputTokens?: number;
   readonly imageInput?: boolean;
   readonly toolCalling?: boolean;
@@ -119,6 +120,7 @@ function normalizeModel(key: string, value: unknown): ModelsDevModelMetadata | u
     description: optionalString(raw.description),
     family: optionalString(raw.family),
     contextLength: optionalTokenCount(limit?.context),
+    maxInputTokens: optionalTokenCount(limit?.input),
     maxOutputTokens: optionalTokenCount(limit?.output),
     imageInput: stringArray(modalities?.input).includes("image"),
     toolCalling: optionalBoolean(raw.tool_call),
@@ -133,7 +135,7 @@ function parseCachedModel(key: string, value: unknown): ModelsDevModelMetadata |
   const raw = asRecord(value);
   if (!raw) return undefined;
   const id = stringValue(raw.id) ?? key.trim();
-  if (!id || !validOptionalNumber(raw.contextLength) || !validOptionalNumber(raw.maxOutputTokens)) return undefined;
+  if (!id || !validOptionalNumber(raw.contextLength) || !validOptionalNumber(raw.maxInputTokens) || !validOptionalNumber(raw.maxOutputTokens)) return undefined;
   if (!validOptionalBoolean(raw.imageInput) || !validOptionalBoolean(raw.toolCalling) || !validOptionalBoolean(raw.reasoning)) return undefined;
   if (raw.reasoningOptions !== undefined && !isStringArray(raw.reasoningOptions)) return undefined;
   return {
@@ -142,6 +144,7 @@ function parseCachedModel(key: string, value: unknown): ModelsDevModelMetadata |
     description: optionalString(raw.description),
     family: optionalString(raw.family),
     contextLength: optionalTokenCount(raw.contextLength),
+    maxInputTokens: optionalTokenCount(raw.maxInputTokens),
     maxOutputTokens: optionalTokenCount(raw.maxOutputTokens),
     imageInput: optionalBoolean(raw.imageInput),
     toolCalling: optionalBoolean(raw.toolCalling),

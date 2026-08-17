@@ -23,15 +23,17 @@ const payload = { openai: { models: { "gpt-test": {
   reasoning_options: [{ type: "effort", values: ["low", "high"] }],
   tool_call: true,
   modalities: { input: ["text", "image"] },
-  limit: { context: 200_000, output: 20_000 },
+  limit: { context: 200_000, input: 175_000, output: 20_000 },
 } } } };
 
 test("normalizes the OpenAI models.dev provider", () => {
   const snapshot = normalizeModelsDevSnapshot(payload, 123);
   assert.equal(snapshot.models["gpt-test"]?.contextLength, 200_000);
+  assert.equal(snapshot.models["gpt-test"]?.maxInputTokens, 175_000);
   assert.equal(snapshot.models["gpt-test"]?.imageInput, true);
   assert.deepEqual(snapshot.models["gpt-test"]?.reasoningOptions, ["low", "high"]);
   assert.equal(parseCachedModelsDevSnapshot(snapshot)?.models["gpt-test"]?.toolCalling, true);
+  assert.equal(parseCachedModelsDevSnapshot(snapshot)?.models["gpt-test"]?.maxInputTokens, 175_000);
   assert.equal(parseCachedModelsDevSnapshot({ fetchedAt: -1, models: {} }), undefined);
 });
 

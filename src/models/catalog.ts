@@ -147,7 +147,9 @@ export function enrichCodexModel(model: CodexModelMetadata, metadata: ModelsDevM
   if (!metadata) return model;
   const contextWindow = metadata.contextLength;
   const output = model.output > 0 ? model.output : Math.min(metadata.maxOutputTokens ?? 0, contextWindow ?? Number.MAX_SAFE_INTEGER);
-  const input = model.input > 0 ? model.input : Math.max(0, (contextWindow ?? 0) - output);
+  const input = model.input > 0
+    ? model.input
+    : metadata.maxInputTokens ?? Math.max(0, (contextWindow ?? 0) - output);
   return {
     ...model,
     name: model.name || metadata.name || model.id,

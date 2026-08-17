@@ -155,12 +155,13 @@ test("keeps live Codex metadata authoritative and fills absent models.dev fields
     name: "Metadata Name",
     description: "Metadata description",
     contextLength: 200_000,
+    maxInputTokens: 175_000,
     maxOutputTokens: 20_000,
   });
   assert.deepEqual({ name: missing.name, description: missing.description, input: missing.input, output: missing.output }, {
     name: "Metadata Name",
     description: "Metadata description",
-    input: 180_000,
+    input: 175_000,
     output: 20_000,
   });
 });

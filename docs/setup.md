@@ -6,7 +6,9 @@ Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload
 
 Use **Codex Bridge: Manage Connection** to authenticate. After sign-in, open Copilot Chat's model picker and enable a model under **Manage Models → Codex Bridge**.
 
-Each model exposes the reasoning efforts advertised by the live Codex catalog. Models
+Each model exposes the reasoning efforts advertised by the live Codex catalog. Ordered
+effort controls default to High when the model supports it; otherwise the catalog default
+is retained. Models
 that advertise the `fast` additional speed tier expose a native **Speed Mode** control
 with Normal and Fast choices. Selecting Fast requests faster processing with increased
 account usage without adding a separate Fast model entry.
@@ -29,6 +31,10 @@ not registered.
 `openaiCodex.catalogCacheMinutes` controls how long the last successful catalog is
 reused before the next discovery request. If a refresh fails, the last usable catalog
 remains available.
+
+The live Codex directory remains authoritative for availability, limits, capabilities,
+and reasoning levels. The extension uses a six-hour, stale-while-revalidate models.dev
+snapshot in VS Code `globalState` only to fill metadata omitted by the live directory.
 
 After sign-in, the **Codex** status-bar item shows ChatGPT subscription utilization for the primary and secondary quota windows. Click it to refresh quota, inspect reset times, or view exact input/output tokens from the most recent inference. Those normalized token counts are also reported to Copilot Chat so its context-window percentage reflects real usage.
 

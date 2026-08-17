@@ -53,10 +53,14 @@
         "command": "openaiCodex.importCodexSession",
         "title": "Codex Bridge: Import Codex CLI Session (Advanced)"
       },
-      {
-        "command": "openaiCodex.testConnection",
-        "title": "Codex Bridge: Test Connection"
-      },
+    {
+      "command": "openaiCodex.testConnection",
+      "title": "Codex Bridge: Test Connection"
+    },
+    {
+      "command": "openaiCodex.refreshModels",
+      "title": "Codex Bridge: Refresh Models"
+    },
       {
         "command": "openaiCodex.showUsage",
         "title": "Codex Bridge: Show Usage"

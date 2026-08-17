@@ -48,10 +48,11 @@ export function modelOptionSpec(
     "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "fastDescription" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
   >,
 ): ModelOptionSpec {
+  const efforts = model.reasoningLevels.map((level) => level.effort);
   return {
-    efforts: model.reasoningLevels.map((level) => level.effort),
+    efforts,
     descriptions: Object.fromEntries(model.reasoningLevels.map((level) => [level.effort, level.description])),
-    defaultEffort: model.defaultReasoningEffort,
+    defaultEffort: efforts.includes("high") ? "high" : model.defaultReasoningEffort,
     supportsFast: model.supportsFast,
     fastDescription: model.fastDescription,
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,

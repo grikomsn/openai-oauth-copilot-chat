@@ -299,6 +299,11 @@ export class OpenAIOAuth {
       }
       await this.storeSession(normalized, session);
       if (this.profileGeneration(normalized) !== expectedGeneration) {
+        const current = await this.loadSession(normalized);
+        if (current && sessionIdentity(current) === sessionIdentity(session)) {
+          await this.secrets.delete(profileSecretKey(normalized));
+          await this.mutateProfileIndex((profiles) => profiles.delete(normalized));
+        }
         throw new Error(`OpenAI Codex sign-in for profile “${normalized}” was superseded`);
       }
     });

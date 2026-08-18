@@ -164,3 +164,34 @@ test("does not start a late manual callback after sign-out", async () => {
   assert.equal(fetchCalls, 0);
   assert.equal(await oauth.hasSession("work"), false);
 });
+
+test("removes an authorization write superseded during SecretStorage persistence", async () => {
+  const values = new Map<string, string>();
+  let persistenceStarted!: () => void;
+  let releasePersistence!: () => void;
+  const started = new Promise<void>((resolve) => { persistenceStarted = resolve; });
+  const wait = new Promise<void>((resolve) => { releasePersistence = resolve; });
+  const secrets = {
+    get: async (key: string) => values.get(key),
+    store: async (key: string, value: string) => {
+      values.set(key, value);
+      if (key === "openaiCodex.oauthSession.v2.work") {
+        persistenceStarted();
+        await wait;
+      }
+    },
+    delete: async (key: string) => { values.delete(key); },
+  } as unknown as vscode.SecretStorage;
+  const oauth = new OpenAIOAuth(secrets, (async () => Response.json({
+    access_token: "access", refresh_token: "refresh", expires_in: 3600,
+  })) as typeof fetch, () => 1_000);
+  const first = oauth.startManualSignIn("work");
+  const completing = first.complete(`?code=one&state=${first.flow.state}`);
+  await started;
+  oauth.startManualSignIn("work");
+  releasePersistence();
+
+  await assert.rejects(completing, /was superseded/);
+  assert.equal(await oauth.hasSession("work"), false);
+  assert.deepEqual(await oauth.listProfiles(), []);
+});

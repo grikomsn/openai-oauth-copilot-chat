@@ -59,6 +59,7 @@ export class OpenAIOAuth {
   private readonly refreshPromises = new Map<string, { identity: string; promise: Promise<OAuthSession> }>();
   private readonly sessionMutations = new Map<string, Promise<void>>();
   private profileIndexMutation: Promise<void> = Promise.resolve();
+  private readonly profileGenerations = new Map<string, number>();
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
@@ -83,6 +84,7 @@ export class OpenAIOAuth {
 
   async signOut(profile = DEFAULT_OAUTH_PROFILE): Promise<void> {
     const normalized = normalizeProfileId(profile);
+    this.invalidateProfile(normalized);
     await this.mutateSession(normalized, async () => {
       await this.secrets.delete(profileSecretKey(normalized));
       if (normalized === DEFAULT_OAUTH_PROFILE) await this.secrets.delete(LEGACY_SECRET_KEY);
@@ -111,6 +113,7 @@ export class OpenAIOAuth {
 
   async startBrowserSignIn(profile = DEFAULT_OAUTH_PROFILE): Promise<BrowserSignIn> {
     const normalizedProfile = normalizeProfileId(profile);
+    const generation = this.beginSessionReplacement(normalizedProfile);
     const flow = this.createAuthorizationFlow();
     let server: Server | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -135,7 +138,7 @@ export class OpenAIOAuth {
           return;
         }
         try {
-          const session = await this.completeAuthorization(callback.toString(), flow, normalizedProfile);
+          const session = await this.completeAuthorization(callback.toString(), flow, normalizedProfile, generation);
           settled = true;
           response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
           response.end(callbackPage(`Signed in to ${EXTENSION_DISPLAY_NAME}`, "You can close this tab and return to Visual Studio Code."));
@@ -179,7 +182,10 @@ export class OpenAIOAuth {
     callbackInput: string,
     flow: AuthorizationFlow,
     profile = DEFAULT_OAUTH_PROFILE,
+    expectedGeneration?: number,
   ): Promise<OAuthSession> {
+    const normalized = normalizeProfileId(profile);
+    const generation = expectedGeneration ?? this.beginSessionReplacement(normalized);
     const callback = parseCallback(callbackInput);
     if (callback.error) throw new Error(callback.errorDescription ?? callback.error);
     if (!callback.code) throw new Error("The callback does not contain an authorization code");
@@ -197,7 +203,7 @@ export class OpenAIOAuth {
     });
     if (!response.ok) throw await responseError("OpenAI token exchange failed", response);
     const session = tokenResponseToSession(await response.json(), undefined, this.now());
-    await this.saveSession(profile, session);
+    await this.saveSession(normalized, session, generation);
     return session;
   }
 
@@ -211,6 +217,8 @@ export class OpenAIOAuth {
   }
 
   async importCodexCliSession(profile = DEFAULT_OAUTH_PROFILE): Promise<OAuthSession> {
+    const normalized = normalizeProfileId(profile);
+    const generation = this.beginSessionReplacement(normalized);
     const authPath = join(homedir(), ".codex", "auth.json");
     const parsed = JSON.parse(await readFile(authPath, "utf8")) as Record<string, unknown>;
     const tokens = recordField(parsed, "tokens") ?? parsed;
@@ -225,7 +233,7 @@ export class OpenAIOAuth {
       accountId: extractAccountId(claims),
       email: typeof claims?.email === "string" ? claims.email : undefined,
     };
-    await this.saveSession(profile, session);
+    await this.saveSession(normalized, session, generation);
     return session;
   }
 
@@ -246,12 +254,15 @@ export class OpenAIOAuth {
         });
         if (!response.ok) throw await responseError("OpenAI token refresh failed", response);
         const refreshed = tokenResponseToSession(await response.json(), session.refreshToken, this.now());
+        let persisted = false;
         await this.mutateSession(profile, async () => {
           const current = await this.loadSession(profile);
           if (current && sessionIdentity(current) === identity) {
             await this.storeSession(profile, refreshed);
+            persisted = true;
           }
         });
+        if (!persisted) throw new Error(`OpenAI Codex profile “${profile}” changed while its session was refreshing`);
         return refreshed;
       })().finally(() => {
         if (this.refreshPromises.get(profile)?.promise === refreshPromise) this.refreshPromises.delete(profile);
@@ -260,9 +271,14 @@ export class OpenAIOAuth {
     return refreshPromise;
   }
 
-  private async saveSession(profile: string, session: OAuthSession): Promise<void> {
+  private async saveSession(profile: string, session: OAuthSession, expectedGeneration: number): Promise<void> {
     const normalized = normalizeProfileId(profile);
-    await this.mutateSession(normalized, () => this.storeSession(normalized, session));
+    await this.mutateSession(normalized, async () => {
+      if (this.profileGeneration(normalized) !== expectedGeneration) {
+        throw new Error(`OpenAI Codex sign-in for profile “${normalized}” was superseded`);
+      }
+      await this.storeSession(normalized, session);
+    });
   }
 
   private async storeSession(profile: string, session: OAuthSession): Promise<void> {
@@ -319,6 +335,20 @@ export class OpenAIOAuth {
     });
     this.profileIndexMutation = current;
     await current;
+  }
+
+  private profileGeneration(profile: string): number {
+    return this.profileGenerations.get(profile) ?? 0;
+  }
+
+  private beginSessionReplacement(profile: string): number {
+    const generation = this.profileGeneration(profile) + 1;
+    this.profileGenerations.set(profile, generation);
+    return generation;
+  }
+
+  private invalidateProfile(profile: string): void {
+    this.profileGenerations.set(profile, this.profileGeneration(profile) + 1);
   }
 }
 

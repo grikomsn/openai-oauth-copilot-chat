@@ -117,6 +117,27 @@ test("does not persist a refresh that finishes after sign-out", async () => {
   const refreshing = oauth.getAccessToken(false, "work");
   await oauth.signOut("work");
   release();
-  await refreshing;
+  await assert.rejects(refreshing, /changed while its session was refreshing/);
+  assert.equal(await oauth.hasSession("work"), false);
+});
+
+test("does not persist an authorization exchange that finishes after sign-out", async () => {
+  const values = new Map<string, string>();
+  const secrets = {
+    get: async (key: string) => values.get(key),
+    store: async (key: string, value: string) => { values.set(key, value); },
+    delete: async (key: string) => { values.delete(key); },
+  } as unknown as vscode.SecretStorage;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => { release = resolve; });
+  const oauth = new OpenAIOAuth(secrets, (async () => {
+    await wait;
+    return Response.json({ access_token: "access", refresh_token: "refresh", expires_in: 3600 });
+  }) as typeof fetch, () => 1_000);
+  const flow = { url: "https://auth.openai.com", state: "state", verifier: "verifier" };
+  const signingIn = oauth.completeAuthorization("?code=one&state=state", flow, "work");
+  await oauth.signOut("work");
+  release();
+  await assert.rejects(signingIn, /was superseded/);
   assert.equal(await oauth.hasSession("work"), false);
 });

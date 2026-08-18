@@ -4,7 +4,9 @@
 
 Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload VS Code.
 
-Use **Codex Bridge: Manage Connection** to authenticate. After sign-in, open Copilot Chat's model picker and enable a model under **Manage Models → Codex Bridge**.
+Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account a profile ID. After sign-in, run **Chat: Manage Language Models**, choose **Add Models → Codex Bridge**, and enter the same profile ID. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window.
+
+The `default` profile preserves an existing single-account session, but after upgrading you must add a Codex Bridge entry in **Chat: Manage Language Models** and use `default` as its profile ID. **Codex Bridge: Select Active Profile** chooses which account the status bar and management commands display; model requests always use the account attached to the selected Language Models entry.
 
 Each model exposes the reasoning efforts advertised by the live Codex catalog. Ordered
 effort controls default to High when the model supports it; otherwise the catalog default
@@ -48,7 +50,7 @@ OpenAI's Codex OAuth client redirects to `http://localhost:1455/auth/callback`. 
 
 - Confirm VS Code is version 1.125 or newer.
 - Confirm GitHub Copilot Chat is installed and enabled.
-- Confirm Codex Bridge is signed in; model discovery uses the authenticated Codex catalog endpoint.
+- Confirm the profile ID in the Language Models entry matches a profile created by **Codex Bridge: Add ChatGPT Account**; model discovery uses that profile's authenticated Codex catalog endpoint.
 - Run **Codex Bridge: Show Diagnostics** and check that the provider reports registered models.
 - Open the model picker, choose **Manage Models**, and enable Codex Bridge models.
 - Your organization can disable bring-your-own-model providers through GitHub Copilot policy.

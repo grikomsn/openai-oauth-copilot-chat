@@ -10,6 +10,7 @@ declare module "vscode" {
     readonly isUserSelectable?: boolean;
     readonly configurationSchema?: LanguageModelConfigurationSchema;
     readonly targetChatSessionType?: string;
+    readonly isBYOK?: boolean;
   }
 
   export interface LanguageModelChatCapabilities {

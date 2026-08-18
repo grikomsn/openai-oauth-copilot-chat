@@ -1,23 +1,26 @@
 import * as vscode from "vscode";
 import { messageOf } from "./errors";
-import { OpenAIOAuth } from "./auth/auth";
+import { DEFAULT_OAUTH_PROFILE, OpenAIOAuth } from "./auth/auth";
 import { registerCodexCommands } from "./commands/commands";
 import { OpenAICodexProvider } from "./provider";
 import { EXTENSION_DISPLAY_NAME, extensionUserAgent } from "./transport/protocol";
 import { formatUsageStatusBar, formatUsageTooltip } from "./usage/presentation";
 import { usageSnapshotForPersistence, type CodexUsageSnapshot } from "./usage/domain";
 
-const USAGE_STATE_KEY = "openaiCodex.usageSnapshot.v1";
+const LEGACY_USAGE_STATE_KEY = "openaiCodex.usageSnapshot.v1";
+const USAGE_STATE_KEY = "openaiCodex.usageSnapshots.v2";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Codex Bridge");
   const oauth = new OpenAIOAuth(context.secrets);
   const version = context.extension.packageJSON.version as string;
+  const storedUsage = context.globalState.get<Readonly<Record<string, CodexUsageSnapshot>>>(USAGE_STATE_KEY)
+    ?? { [DEFAULT_OAUTH_PROFILE]: context.globalState.get<CodexUsageSnapshot>(LEGACY_USAGE_STATE_KEY) ?? {} };
   const provider = new OpenAICodexProvider(
     oauth,
     output,
     extensionUserAgent(version, vscode.version),
-    context.globalState.get<CodexUsageSnapshot>(USAGE_STATE_KEY) ?? {},
+    storedUsage,
     context.globalState,
   );
   const usageStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 91);
@@ -28,10 +31,11 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     usageStatus,
-    provider.onDidChangeUsage((usage) => {
-      renderUsageStatus(usageStatus, usage);
+    provider.onDidChangeUsage(({ profile, usage }) => {
+      if (profile === provider.getActiveProfile()) renderUsageStatus(usageStatus, usage);
       updateUsageStatusVisibility(usageStatus);
-      void context.globalState.update(USAGE_STATE_KEY, usageSnapshotForPersistence(usage));
+      const persisted = Object.fromEntries(Object.entries(provider.getUsageSnapshots()).map(([key, value]) => [key, usageSnapshotForPersistence(value)]));
+      void context.globalState.update(USAGE_STATE_KEY, persisted);
     }),
     vscode.lm.registerLanguageModelChatProvider("openai-codex", provider),
     ...registerCodexCommands(oauth, provider, output, usageStatus),

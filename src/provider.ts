@@ -18,7 +18,7 @@ import {
   parseCodexModelsPayload,
   type CodexModelMetadata,
 } from "./models/catalog";
-import { OpenAIOAuth } from "./auth/auth";
+import { DEFAULT_OAUTH_PROFILE, normalizeProfileId, OpenAIOAuth } from "./auth/auth";
 import { partText } from "./provider/messages";
 import { buildRequest } from "./provider/request";
 import { consumeStream } from "./provider/response";
@@ -38,6 +38,7 @@ import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
   rawModelId: string;
+  profile: string;
   speedMode: SpeedMode;
   optionSpec: ModelOptionSpec;
   supportsParallelToolCalls: boolean;
@@ -57,13 +58,14 @@ export interface CodexModel extends vscode.LanguageModelChatInformation {
  */
 export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<CodexModel> {
   private readonly changeEmitter = new vscode.EventEmitter<void>();
-  private readonly usageEmitter = new vscode.EventEmitter<CodexUsageSnapshot>();
+  private readonly usageEmitter = new vscode.EventEmitter<{ profile: string; usage: CodexUsageSnapshot }>();
   readonly onDidChangeLanguageModelChatInformation = this.changeEmitter.event;
   readonly onDidChangeUsage = this.usageEmitter.event;
-  private usage: CodexUsageSnapshot;
-  private lastQuotaFetchAt = 0;
-  private readonly modelCache = new CatalogCache<CodexModelMetadata[]>();
-  private modelCacheAccount: string | undefined;
+  private readonly usageByProfile = new Map<string, CodexUsageSnapshot>();
+  private readonly lastQuotaFetchAt = new Map<string, number>();
+  private readonly modelCaches = new Map<string, CatalogCache<CodexModelMetadata[]>>();
+  private readonly modelCacheAccounts = new Map<string, string>();
+  private activeProfile = DEFAULT_OAUTH_PROFILE;
   private readonly transport: CodexTransport;
   private readonly metadata: ModelsDevMetadata;
 
@@ -71,11 +73,11 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     private readonly oauth: OpenAIOAuth,
     private readonly output: vscode.OutputChannel,
     userAgent: string,
-    initialUsage: CodexUsageSnapshot = {},
+    initialUsage: Readonly<Record<string, CodexUsageSnapshot>> = {},
     metadataCache: MetadataCache = memoryMetadataCache(),
     fetcher: typeof fetch = fetch,
   ) {
-    this.usage = initialUsage;
+    for (const [profile, usage] of Object.entries(initialUsage)) this.usageByProfile.set(profile, usage);
     this.transport = new CodexTransport(
       oauth,
       userAgent,
@@ -89,16 +91,21 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     this.changeEmitter.fire();
   }
 
-  clearModelCache(): void {
-    this.modelCache.clear();
-    this.modelCacheAccount = undefined;
+  clearModelCache(profile?: string): void {
+    if (profile) {
+      this.modelCaches.get(profile)?.clear();
+      this.modelCacheAccounts.delete(profile);
+      return;
+    }
+    for (const cache of this.modelCaches.values()) cache.clear();
+    this.modelCacheAccounts.clear();
   }
 
-  async refreshModels(): Promise<number> {
-    this.clearModelCache();
+  async refreshModels(profile = this.activeProfile): Promise<number> {
+    this.clearModelCache(profile);
     const cancellation = new vscode.CancellationTokenSource();
     try {
-      const models = await this.fetchModels(cancellation.token);
+      const models = await this.fetchModels(cancellation.token, profile);
       this.fireDidChange();
       return expandCodexModelVariants(models).length;
     } finally {
@@ -106,23 +113,37 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     }
   }
 
-  getUsageSnapshot(): CodexUsageSnapshot {
-    return this.usage;
+  getActiveProfile(): string {
+    return this.activeProfile;
   }
 
-  clearUsage(): void {
-    this.setUsage({});
+  setActiveProfile(profile: string): void {
+    this.activeProfile = normalizeProfileId(profile);
+    this.usageEmitter.fire({ profile: this.activeProfile, usage: this.getUsageSnapshot() });
   }
 
-  async refreshUsage(): Promise<CodexUsageSnapshot> {
+  getUsageSnapshot(profile = this.activeProfile): CodexUsageSnapshot {
+    return this.usageByProfile.get(profile) ?? {};
+  }
+
+  getUsageSnapshots(): Readonly<Record<string, CodexUsageSnapshot>> {
+    return Object.fromEntries(this.usageByProfile);
+  }
+
+  clearUsage(profile = this.activeProfile): void {
+    this.setUsage(profile, {});
+  }
+
+  async refreshUsage(profile = this.activeProfile): Promise<CodexUsageSnapshot> {
+    this.activeProfile = profile;
     try {
-      const response = await this.transport.sendUsage();
+      const response = await this.transport.sendUsage(profile);
       if (!response.ok) throw await responseError("Unable to refresh OpenAI Codex usage", response);
       const updatedAt = Date.now();
-      this.lastQuotaFetchAt = updatedAt;
-      let next = mergeQuotaPayload(this.usage, await response.json(), updatedAt);
+      this.lastQuotaFetchAt.set(profile, updatedAt);
+      let next = mergeQuotaPayload(this.getUsageSnapshot(profile), await response.json(), updatedAt);
       try {
-        const resetCreditsResponse = await this.transport.sendResetCredits();
+        const resetCreditsResponse = await this.transport.sendResetCredits(profile);
         if (!resetCreditsResponse.ok) {
           next = { ...next, resetCredits: undefined, resetCreditsError: "The Codex backend did not provide reset-credit details" };
         } else {
@@ -132,23 +153,23 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         // Reset-credit details are optional; quota refresh remains useful when this private endpoint changes.
         next = { ...next, resetCredits: undefined, resetCreditsError: "Reset-credit details could not be refreshed" };
       }
-      this.setUsage(next);
-      return this.usage;
+      this.setUsage(profile, next);
+      return next;
     } catch (error) {
-      this.setUsage({ ...this.usage, error: messageOf(error), updatedAt: Date.now() });
+      this.setUsage(profile, { ...this.getUsageSnapshot(profile), error: messageOf(error), updatedAt: Date.now() });
       throw error;
     }
   }
 
-  async consumeResetCredit(creditId: string): Promise<{ outcome: string; windowsReset?: number }> {
+  async consumeResetCredit(creditId: string, profile = this.activeProfile): Promise<{ outcome: string; windowsReset?: number }> {
     const redeemRequestId = randomUUID();
     const response = await this.transport.sendResetCreditConsume((accountId) => JSON.stringify(
       buildResetCreditConsumePayload(creditId, redeemRequestId, accountId),
-    ));
+    ), profile);
     if (!response.ok) throw await responseError("Unable to redeem OpenAI Codex reset credit", response);
     const result = parseResetCreditConsumePayload(await response.json());
     try {
-      await this.refreshUsage();
+      await this.refreshUsage(profile);
     } catch {
       // The redemption result is authoritative even if the follow-up snapshot is temporarily unavailable.
     }
@@ -168,25 +189,30 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
    * @see {@link expandCodexModelVariants}
    */
   async provideLanguageModelChatInformation(
-    _options: vscode.PrepareLanguageModelChatModelOptions,
+    options: vscode.PrepareLanguageModelChatModelOptions,
     token: vscode.CancellationToken,
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
-    const models = expandCodexModelVariants(await this.fetchModels(token));
+    if (!options.configuration) return [];
+    const profile = profileFromConfiguration(options.configuration);
+    if (!await this.oauth.hasSession(profile)) return [];
+    const models = expandCodexModelVariants(await this.fetchModels(token, profile));
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
       const defaults = resolveRequestOptions(optionSpec, model.speedMode, undefined);
       return {
         id: model.registrationId,
         rawModelId: model.rawModelId,
+        profile,
         name: model.name,
         family: model.rawModelId,
         version: model.version,
-        detail: model.detail,
+        detail: `${model.detail} · ${profile}`,
         tooltip: model.description,
         maxInputTokens: model.input,
         maxOutputTokens: model.output,
         isUserSelectable: true,
+        isBYOK: true,
         configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),
         capabilities: { imageInput: model.image, toolCalling: model.toolCalling },
         speedMode: model.speedMode,
@@ -203,6 +229,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     token: vscode.CancellationToken,
   ): Promise<void> {
+    this.activeProfile = model.profile;
     const requestOptions = resolveRequestOptions(model.optionSpec, model.speedMode, options.modelConfiguration);
     const body = buildRequest(
       model.rawModelId,
@@ -212,16 +239,16 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       model.supportsParallelToolCalls,
       model.optionSpec.supportsReasoningSummaryParameter,
     );
-    const response = await this.transport.sendResponse(body, token);
+    const response = await this.transport.sendResponse(body, token, model.profile);
     if (!response.ok) throw await responseError(`OpenAI Codex request failed for ${model.rawModelId}`, response);
     if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
 
     if (configuration().get("debugLogging", false)) {
       this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} imageGeneration=${requestOptions.imageGeneration} initiator=${options.requestInitiator ?? "unknown"}`);
     }
-    await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId));
-    if (Date.now() - this.lastQuotaFetchAt > 60_000) {
-      void this.refreshUsage().catch((error) => this.output.appendLine(`[usage] refresh failed: ${messageOf(error)}`));
+    await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId, model.profile));
+    if (Date.now() - (this.lastQuotaFetchAt.get(model.profile) ?? 0) > 60_000) {
+      void this.refreshUsage(model.profile).catch((error) => this.output.appendLine(`[usage] refresh failed: ${messageOf(error)}`));
     }
   }
 
@@ -234,10 +261,10 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     return Math.max(1, Math.ceil(text.length / 4));
   }
 
-  async testConnection(): Promise<{ model: string; text: string; speedMode: string; reasoningEffort: string; reasoningSummary: string }> {
+  async testConnection(profile = this.activeProfile): Promise<{ model: string; text: string; speedMode: string; reasoningEffort: string; reasoningSummary: string }> {
     const cancellation = new vscode.CancellationTokenSource();
     try {
-      const model = (await this.fetchModels(cancellation.token))[0];
+      const model = (await this.fetchModels(cancellation.token, profile))[0];
       const requestOptions = resolveRequestOptions(modelOptionSpec(model), "normal", undefined);
       const body = applyModelRequestOptions({
         model: model.id,
@@ -247,50 +274,57 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         stream: true,
         include: ["reasoning.encrypted_content"],
       }, requestOptions, model.supportsReasoningSummaryParameter);
-      const response = await this.transport.sendResponse(body, cancellation.token);
+      const response = await this.transport.sendResponse(body, cancellation.token, profile);
       if (!response.ok) throw await responseError("OpenAI Codex connection test failed", response);
       if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
       const text: string[] = [];
       await consumeStream(response.body, { report: (part) => {
         if (part instanceof vscode.LanguageModelTextPart) text.push(part.value);
-      } }, cancellation.token, (usage) => this.captureRequestUsage(usage, model.id));
+      } }, cancellation.token, (usage) => this.captureRequestUsage(usage, model.id, profile));
       return { model: model.id, text: text.join("").trim() || "(empty response)", ...requestOptions };
     } finally {
       cancellation.dispose();
     }
   }
 
-  private async fetchModels(cancellation: vscode.CancellationToken): Promise<CodexModelMetadata[]> {
+  private async fetchModels(cancellation: vscode.CancellationToken, profile: string): Promise<CodexModelMetadata[]> {
     const maxAge = Math.max(1, configuration().get("catalogCacheMinutes", 5)) * 60_000;
-    const session = await this.oauth.sessionInfo();
+    const session = await this.oauth.sessionInfo(profile);
     const account = session?.accountId ?? session?.email;
-    if (!account || account !== this.modelCacheAccount) this.clearModelCache();
-    const models = await this.modelCache.getOrRefresh(maxAge, async () => {
-      const response = await this.transport.sendModels(cancellation);
+    if (!account) throw new Error(`Sign in to OpenAI Codex profile “${profile}” first`);
+    if (account !== this.modelCacheAccounts.get(profile)) this.clearModelCache(profile);
+    const cache = this.modelCaches.get(profile) ?? new CatalogCache<CodexModelMetadata[]>();
+    this.modelCaches.set(profile, cache);
+    const models = await cache.getOrRefresh(maxAge, async () => {
+      const response = await this.transport.sendModels(cancellation, profile);
       if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
       const parsed = parseCodexModelsPayload(await response.json());
       if (!parsed.length) throw new Error("OpenAI Codex returned no usable models");
       const metadata = await this.metadata.getOrRefresh();
       return parsed.map((model) => enrichCodexModel(model, metadata.models[model.id]));
     }, () => cancellation.isCancellationRequested);
-    this.modelCacheAccount = account;
+    this.modelCacheAccounts.set(profile, account);
     return models;
   }
 
-  private captureRequestUsage(raw: Record<string, unknown>, modelId: string): void {
+  private captureRequestUsage(raw: Record<string, unknown>, modelId: string, profile: string): void {
     const payload = toProviderUsagePayload(raw);
     if (!payload) return;
     if (configuration().get("debugLogging", false)) {
       this.output.appendLine(`[usage] model=${modelId} ${JSON.stringify(payload)}`);
     }
-    this.setUsage(recordRequestUsage(this.usage, raw, modelId));
+    this.setUsage(profile, recordRequestUsage(this.getUsageSnapshot(profile), raw, modelId));
   }
 
-  private setUsage(usage: CodexUsageSnapshot): void {
-    this.usage = usage;
-    this.usageEmitter.fire(usage);
+  private setUsage(profile: string, usage: CodexUsageSnapshot): void {
+    this.usageByProfile.set(profile, usage);
+    this.usageEmitter.fire({ profile, usage });
   }
 
+}
+
+export function profileFromConfiguration(configuration: Readonly<Record<string, unknown>> | undefined): string {
+  return normalizeProfileId(typeof configuration?.profile === "string" ? configuration.profile : DEFAULT_OAUTH_PROFILE);
 }
 
 function memoryMetadataCache(): MetadataCache {

@@ -42,6 +42,14 @@
         "title": "Codex Bridge: Manage Connection"
       },
       {
+        "command": "openaiCodex.addAccount",
+        "title": "Codex Bridge: Add ChatGPT Account"
+      },
+      {
+        "command": "openaiCodex.selectProfile",
+        "title": "Codex Bridge: Select Active Profile"
+      },
+      {
         "command": "openaiCodex.signIn",
         "title": "Codex Bridge: Sign In with ChatGPT"
       },
@@ -148,7 +156,21 @@
       {
         "vendor": "openai-codex",
         "displayName": "Codex Bridge",
-        "managementCommand": "openaiCodex.manage"
+        "configuration": {
+          "type": "object",
+          "required": [
+            "profile"
+          ],
+          "properties": {
+            "profile": {
+              "type": "string",
+              "title": "Codex Bridge Profile",
+              "description": "Profile ID created with Codex Bridge: Add ChatGPT Account (for example, personal or work).",
+              "default": "default",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            }
+          }
+        }
       }
     ]
   },

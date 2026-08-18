@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type * as vscode from "vscode";
-import { decodeJwt, OpenAIOAuth, parseCallback } from "./auth";
+import { decodeJwt, normalizeProfileId, OpenAIOAuth, parseCallback } from "./auth";
 import { OAUTH_ORIGINATOR } from "../transport/protocol";
 
 test("parses OAuth callback URLs", () => {
@@ -40,4 +40,37 @@ test("rejects OAuth callbacks with missing or mismatched state before token exch
     /Invalid OpenAI OAuth callback state/,
   );
   assert.equal(fetchCalls, 0);
+});
+
+test("stores and resolves OAuth sessions independently by profile", async () => {
+  const values = new Map<string, string>();
+  const secrets = {
+    get: async (key: string) => values.get(key),
+    store: async (key: string, value: string) => { values.set(key, value); },
+    delete: async (key: string) => { values.delete(key); },
+  } as unknown as vscode.SecretStorage;
+  let token = "personal-token";
+  const fetcher = (async () => new Response(JSON.stringify({
+    access_token: token,
+    refresh_token: `${token}-refresh`,
+    expires_in: 3600,
+  }), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+  const oauth = new OpenAIOAuth(secrets, fetcher, () => 1_000);
+  const flow = { url: "https://auth.openai.com", state: "state", verifier: "verifier" };
+
+  await oauth.completeAuthorization("?code=one&state=state", flow, "personal");
+  token = "work-token";
+  await oauth.completeAuthorization("?code=two&state=state", flow, "work");
+
+  assert.deepEqual(await oauth.listProfiles(), ["personal", "work"]);
+  assert.equal((await oauth.getAccessToken(false, "personal")).token, "personal-token");
+  assert.equal((await oauth.getAccessToken(false, "work")).token, "work-token");
+  await oauth.signOut("personal");
+  assert.equal(await oauth.hasSession("personal"), false);
+  assert.equal(await oauth.hasSession("work"), true);
+});
+
+test("normalizes safe profile IDs and rejects ambiguous values", () => {
+  assert.equal(normalizeProfileId(" Work.Profile "), "work.profile");
+  assert.throws(() => normalizeProfileId("work profile"), /Profile IDs/);
 });

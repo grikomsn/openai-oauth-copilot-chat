@@ -74,3 +74,49 @@ test("normalizes safe profile IDs and rejects ambiguous values", () => {
   assert.equal(normalizeProfileId(" Work.Profile "), "work.profile");
   assert.throws(() => normalizeProfileId("work profile"), /Profile IDs/);
 });
+
+test("serializes concurrent profile-index updates", async () => {
+  const values = new Map<string, string>();
+  const secrets = {
+    get: async (key: string) => values.get(key),
+    store: async (key: string, value: string) => {
+      if (key.includes("oauthProfiles")) await new Promise((resolve) => setTimeout(resolve, 5));
+      values.set(key, value);
+    },
+    delete: async (key: string) => { values.delete(key); },
+  } as unknown as vscode.SecretStorage;
+  const oauth = new OpenAIOAuth(secrets, (async (_input, init) => {
+    const code = new URLSearchParams(String(init?.body)).get("code");
+    return Response.json({ access_token: `${code}-access`, refresh_token: `${code}-refresh`, expires_in: 3600 });
+  }) as typeof fetch, () => 1_000);
+  const flow = { url: "https://auth.openai.com", state: "state", verifier: "verifier" };
+
+  await Promise.all([
+    oauth.completeAuthorization("?code=personal&state=state", flow, "personal"),
+    oauth.completeAuthorization("?code=work&state=state", flow, "work"),
+  ]);
+  assert.deepEqual(await oauth.listProfiles(), ["personal", "work"]);
+});
+
+test("does not persist a refresh that finishes after sign-out", async () => {
+  const values = new Map<string, string>([["openaiCodex.oauthSession.v2.work", JSON.stringify({
+    accessToken: "old-access", refreshToken: "old-refresh", expiresAt: 0,
+  })]]);
+  const secrets = {
+    get: async (key: string) => values.get(key),
+    store: async (key: string, value: string) => { values.set(key, value); },
+    delete: async (key: string) => { values.delete(key); },
+  } as unknown as vscode.SecretStorage;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => { release = resolve; });
+  const oauth = new OpenAIOAuth(secrets, (async () => {
+    await wait;
+    return Response.json({ access_token: "refreshed", refresh_token: "rotated", expires_in: 3600 });
+  }) as typeof fetch, () => 1_000);
+
+  const refreshing = oauth.getAccessToken(false, "work");
+  await oauth.signOut("work");
+  release();
+  await refreshing;
+  assert.equal(await oauth.hasSession("work"), false);
+});

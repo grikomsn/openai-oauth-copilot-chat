@@ -223,13 +223,16 @@ async function refreshModels(provider: OpenAICodexProvider, output: vscode.Outpu
   }
 }
 
-async function showUsage(provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
-  const profile = provider.getActiveProfile();
-  let snapshot = provider.getUsageSnapshot();
+async function showUsage(
+  provider: OpenAICodexProvider,
+  output: vscode.OutputChannel,
+  profile = provider.getActiveProfile(),
+): Promise<void> {
+  let snapshot = provider.getUsageSnapshot(profile);
   try {
     snapshot = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Window, title: "Refreshing Codex usage…" },
-      () => provider.refreshUsage(),
+      () => provider.refreshUsage(profile),
     );
   } catch (error) {
     output.appendLine(`[usage] refresh failed: ${messageOf(error)}`);
@@ -245,12 +248,17 @@ async function showUsage(provider: OpenAICodexProvider, output: vscode.OutputCha
     matchOnDescription: true,
     matchOnDetail: true,
   });
-  if (picked?.action === "refresh") await showUsage(provider, output);
+  if (picked?.action === "refresh") await showUsage(provider, output, profile);
   else if (picked?.action === "open") await vscode.env.openExternal(vscode.Uri.parse("https://chatgpt.com/codex"));
-  else if (picked?.action === "redeemReset" && picked.resetCreditId) await redeemReset(provider, output, picked.resetCreditId);
+  else if (picked?.action === "redeemReset" && picked.resetCreditId) await redeemReset(provider, output, picked.resetCreditId, profile);
 }
 
-async function redeemReset(provider: OpenAICodexProvider, output: vscode.OutputChannel, creditId: string): Promise<void> {
+async function redeemReset(
+  provider: OpenAICodexProvider,
+  output: vscode.OutputChannel,
+  creditId: string,
+  profile: string,
+): Promise<void> {
   const confirmation = await vscode.window.showWarningMessage(
     "Redeem this Codex reset credit? It resets both the 5-hour and weekly usage windows and consumes one banked reset.",
     { modal: true },
@@ -260,7 +268,7 @@ async function redeemReset(provider: OpenAICodexProvider, output: vscode.OutputC
   try {
     const result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Window, title: "Redeeming Codex reset credit…" },
-      () => provider.consumeResetCredit(creditId),
+      () => provider.consumeResetCredit(creditId, profile),
     );
     const messages: Record<string, string> = {
       alreadyRedeemed: "This Codex reset request was already redeemed.",
@@ -273,7 +281,7 @@ async function redeemReset(provider: OpenAICodexProvider, output: vscode.OutputC
     } else if (result.outcome === "alreadyRedeemed") vscode.window.showInformationMessage(messages[result.outcome]);
     else if (messages[result.outcome]) vscode.window.showWarningMessage(messages[result.outcome]);
     else vscode.window.showWarningMessage(`Codex reset response: ${result.outcome}`);
-    await showUsage(provider, output);
+    await showUsage(provider, output, profile);
   } catch (error) {
     showError("Codex reset credit redemption failed", error, output);
   }

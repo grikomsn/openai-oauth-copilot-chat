@@ -34,6 +34,7 @@ import {
 import { CodexTransport } from "./transport/client";
 import { CatalogCache } from "./models/catalog-cache";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
+import { profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
 
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
@@ -135,7 +136,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   async refreshUsage(profile = this.activeProfile): Promise<CodexUsageSnapshot> {
-    this.activeProfile = profile;
     try {
       const response = await this.transport.sendUsage(profile);
       if (!response.ok) throw await responseError("Unable to refresh OpenAI Codex usage", response);
@@ -201,7 +201,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       const optionSpec = modelOptionSpec(model);
       const defaults = resolveRequestOptions(optionSpec, model.speedMode, undefined);
       return {
-        id: model.registrationId,
+        id: profileQualifiedModelId(profile, model.registrationId),
         rawModelId: model.rawModelId,
         profile,
         name: model.name,
@@ -213,6 +213,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         maxOutputTokens: model.output,
         isUserSelectable: true,
         isBYOK: true,
+        requiresAuthorization: { label: `Codex Bridge (${profile})` },
         configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),
         capabilities: { imageInput: model.image, toolCalling: model.toolCalling },
         speedMode: model.speedMode,
@@ -229,7 +230,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     token: vscode.CancellationToken,
   ): Promise<void> {
-    this.activeProfile = model.profile;
     const requestOptions = resolveRequestOptions(model.optionSpec, model.speedMode, options.modelConfiguration);
     const body = buildRequest(
       model.rawModelId,
@@ -321,10 +321,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     this.usageEmitter.fire({ profile, usage });
   }
 
-}
-
-export function profileFromConfiguration(configuration: Readonly<Record<string, unknown>> | undefined): string {
-  return normalizeProfileId(typeof configuration?.profile === "string" ? configuration.profile : DEFAULT_OAUTH_PROFILE);
 }
 
 function memoryMetadataCache(): MetadataCache {

@@ -56,7 +56,9 @@ type Fetcher = typeof fetch;
  * access token and optional ChatGPT account identifier needed for a request.
  */
 export class OpenAIOAuth {
-  private readonly refreshPromises = new Map<string, Promise<OAuthSession>>();
+  private readonly refreshPromises = new Map<string, { identity: string; promise: Promise<OAuthSession> }>();
+  private readonly sessionMutations = new Map<string, Promise<void>>();
+  private profileIndexMutation: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
@@ -81,11 +83,11 @@ export class OpenAIOAuth {
 
   async signOut(profile = DEFAULT_OAUTH_PROFILE): Promise<void> {
     const normalized = normalizeProfileId(profile);
-    await this.secrets.delete(profileSecretKey(normalized));
-    if (normalized === DEFAULT_OAUTH_PROFILE) await this.secrets.delete(LEGACY_SECRET_KEY);
-    const profiles = await this.readProfileIndex();
-    profiles.delete(normalized);
-    await this.writeProfileIndex(profiles);
+    await this.mutateSession(normalized, async () => {
+      await this.secrets.delete(profileSecretKey(normalized));
+      if (normalized === DEFAULT_OAUTH_PROFILE) await this.secrets.delete(LEGACY_SECRET_KEY);
+      await this.mutateProfileIndex((profiles) => profiles.delete(normalized));
+    });
   }
 
   createAuthorizationFlow(): AuthorizationFlow {
@@ -228,9 +230,11 @@ export class OpenAIOAuth {
   }
 
   private async refresh(profile: string, session: OAuthSession): Promise<OAuthSession> {
-    let refreshPromise = this.refreshPromises.get(profile);
-    if (!refreshPromise) {
-      refreshPromise = (async () => {
+    const identity = sessionIdentity(session);
+    const existing = this.refreshPromises.get(profile);
+    if (existing?.identity === identity) return existing.promise;
+    let refreshPromise: Promise<OAuthSession>;
+    refreshPromise = (async () => {
         const response = await this.fetcher(OPENAI_TOKEN_URL, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
@@ -242,20 +246,29 @@ export class OpenAIOAuth {
         });
         if (!response.ok) throw await responseError("OpenAI token refresh failed", response);
         const refreshed = tokenResponseToSession(await response.json(), session.refreshToken, this.now());
-        await this.saveSession(profile, refreshed);
+        await this.mutateSession(profile, async () => {
+          const current = await this.loadSession(profile);
+          if (current && sessionIdentity(current) === identity) {
+            await this.storeSession(profile, refreshed);
+          }
+        });
         return refreshed;
-      })().finally(() => { this.refreshPromises.delete(profile); });
-      this.refreshPromises.set(profile, refreshPromise);
-    }
+      })().finally(() => {
+        if (this.refreshPromises.get(profile)?.promise === refreshPromise) this.refreshPromises.delete(profile);
+      });
+    this.refreshPromises.set(profile, { identity, promise: refreshPromise });
     return refreshPromise;
   }
 
   private async saveSession(profile: string, session: OAuthSession): Promise<void> {
     const normalized = normalizeProfileId(profile);
+    await this.mutateSession(normalized, () => this.storeSession(normalized, session));
+  }
+
+  private async storeSession(profile: string, session: OAuthSession): Promise<void> {
+    const normalized = normalizeProfileId(profile);
     await this.secrets.store(profileSecretKey(normalized), JSON.stringify(session));
-    const profiles = await this.readProfileIndex();
-    profiles.add(normalized);
-    await this.writeProfileIndex(profiles);
+    await this.mutateProfileIndex((profiles) => { profiles.add(normalized); });
   }
 
   private async loadSession(profile: string): Promise<OAuthSession | undefined> {
@@ -286,6 +299,27 @@ export class OpenAIOAuth {
   private async writeProfileIndex(profiles: ReadonlySet<string>): Promise<void> {
     await this.secrets.store(PROFILE_INDEX_KEY, JSON.stringify([...profiles].sort()));
   }
+
+  private async mutateSession(profile: string, operation: () => Promise<void>): Promise<void> {
+    const previous = this.sessionMutations.get(profile) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    this.sessionMutations.set(profile, current);
+    try {
+      await current;
+    } finally {
+      if (this.sessionMutations.get(profile) === current) this.sessionMutations.delete(profile);
+    }
+  }
+
+  private async mutateProfileIndex(operation: (profiles: Set<string>) => void): Promise<void> {
+    const current = this.profileIndexMutation.catch(() => undefined).then(async () => {
+      const profiles = await this.readProfileIndex();
+      operation(profiles);
+      await this.writeProfileIndex(profiles);
+    });
+    this.profileIndexMutation = current;
+    await current;
+  }
 }
 
 export function normalizeProfileId(value: string): string {
@@ -299,6 +333,10 @@ export function normalizeProfileId(value: string): string {
 
 function profileSecretKey(profile: string): string {
   return `${PROFILE_SECRET_PREFIX}${profile}`;
+}
+
+function sessionIdentity(session: OAuthSession): string {
+  return `${session.accessToken}\u0000${session.refreshToken}\u0000${session.expiresAt}`;
 }
 
 export function parseCallback(input: string): { code?: string; state?: string; error?: string; errorDescription?: string } {

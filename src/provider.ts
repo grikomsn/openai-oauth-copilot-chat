@@ -194,7 +194,15 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   ): Promise<CodexModel[]> {
     if (token.isCancellationRequested) return [];
     if (!options.configuration) return [];
-    const profile = profileFromConfiguration(options.configuration);
+    let profile: string;
+    try {
+      profile = profileFromConfiguration(options.configuration);
+    } catch (error) {
+      const message = messageOf(error);
+      this.output.appendLine(`[models] ${message}`);
+      void vscode.window.showErrorMessage(message);
+      return [];
+    }
     if (!await this.oauth.hasSession(profile)) return [];
     const models = expandCodexModelVariants(await this.fetchModels(token, profile));
     return models.map((model) => {

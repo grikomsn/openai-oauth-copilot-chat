@@ -10,5 +10,6 @@ export function profileFromConfiguration(configuration: Readonly<Record<string, 
 }
 
 export function profileQualifiedModelId(profile: string, modelId: string): string {
-  return `${normalizeProfileId(profile)}::${modelId}`;
+  const normalized = normalizeProfileId(profile);
+  return normalized === DEFAULT_OAUTH_PROFILE ? modelId : `${normalized}::${modelId}`;
 }

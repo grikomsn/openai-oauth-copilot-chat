@@ -141,3 +141,26 @@ test("does not persist an authorization exchange that finishes after sign-out", 
   await assert.rejects(signingIn, /was superseded/);
   assert.equal(await oauth.hasSession("work"), false);
 });
+
+test("does not start a late manual callback after sign-out", async () => {
+  const values = new Map<string, string>();
+  const secrets = {
+    get: async (key: string) => values.get(key),
+    store: async (key: string, value: string) => { values.set(key, value); },
+    delete: async (key: string) => { values.delete(key); },
+  } as unknown as vscode.SecretStorage;
+  let fetchCalls = 0;
+  const oauth = new OpenAIOAuth(secrets, (async () => {
+    fetchCalls += 1;
+    return Response.json({ access_token: "access", refresh_token: "refresh", expires_in: 3600 });
+  }) as typeof fetch, () => 1_000);
+  const attempt = oauth.startManualSignIn("work");
+  await oauth.signOut("work");
+
+  await assert.rejects(
+    attempt.complete(`?code=one&state=${attempt.flow.state}`),
+    /was superseded/,
+  );
+  assert.equal(fetchCalls, 0);
+  assert.equal(await oauth.hasSession("work"), false);
+});

@@ -47,6 +47,12 @@ export interface BrowserSignIn {
   cancel(): void;
 }
 
+/** Manual authorization attempt bound to the profile generation at launch. */
+export interface ManualSignIn {
+  flow: AuthorizationFlow;
+  complete(callbackInput: string): Promise<OAuthSession>;
+}
+
 type Fetcher = typeof fetch;
 
 /**
@@ -109,6 +115,16 @@ export class OpenAIOAuth {
     url.searchParams.set("codex_cli_simplified_flow", "true");
     url.searchParams.set("originator", OAUTH_ORIGINATOR);
     return { url: url.toString(), state, verifier };
+  }
+
+  startManualSignIn(profile = DEFAULT_OAUTH_PROFILE): ManualSignIn {
+    const normalized = normalizeProfileId(profile);
+    const generation = this.beginSessionReplacement(normalized);
+    const flow = this.createAuthorizationFlow();
+    return {
+      flow,
+      complete: (callbackInput) => this.completeAuthorization(callbackInput, flow, normalized, generation),
+    };
   }
 
   async startBrowserSignIn(profile = DEFAULT_OAUTH_PROFILE): Promise<BrowserSignIn> {
@@ -190,6 +206,9 @@ export class OpenAIOAuth {
     if (callback.error) throw new Error(callback.errorDescription ?? callback.error);
     if (!callback.code) throw new Error("The callback does not contain an authorization code");
     if (callback.state !== flow.state) throw new Error("Invalid OpenAI OAuth callback state");
+    if (this.profileGeneration(normalized) !== generation) {
+      throw new Error(`OpenAI Codex sign-in for profile “${normalized}” was superseded`);
+    }
     const response = await this.fetcher(OPENAI_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
@@ -239,6 +258,7 @@ export class OpenAIOAuth {
 
   private async refresh(profile: string, session: OAuthSession): Promise<OAuthSession> {
     const identity = sessionIdentity(session);
+    const generation = this.profileGeneration(profile);
     const existing = this.refreshPromises.get(profile);
     if (existing?.identity === identity) return existing.promise;
     let refreshPromise: Promise<OAuthSession>;
@@ -257,9 +277,9 @@ export class OpenAIOAuth {
         let persisted = false;
         await this.mutateSession(profile, async () => {
           const current = await this.loadSession(profile);
-          if (current && sessionIdentity(current) === identity) {
+          if (this.profileGeneration(profile) === generation && current && sessionIdentity(current) === identity) {
             await this.storeSession(profile, refreshed);
-            persisted = true;
+            persisted = this.profileGeneration(profile) === generation;
           }
         });
         if (!persisted) throw new Error(`OpenAI Codex profile “${profile}” changed while its session was refreshing`);
@@ -278,6 +298,9 @@ export class OpenAIOAuth {
         throw new Error(`OpenAI Codex sign-in for profile “${normalized}” was superseded`);
       }
       await this.storeSession(normalized, session);
+      if (this.profileGeneration(normalized) !== expectedGeneration) {
+        throw new Error(`OpenAI Codex sign-in for profile “${normalized}” was superseded`);
+      }
     });
   }
 

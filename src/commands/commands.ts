@@ -105,7 +105,8 @@ async function manualSignIn(
   output: vscode.OutputChannel,
   profile = DEFAULT_OAUTH_PROFILE,
 ): Promise<void> {
-  const flow: AuthorizationFlow = oauth.createAuthorizationFlow();
+  const attempt = oauth.startManualSignIn(profile);
+  const flow: AuthorizationFlow = attempt.flow;
   try {
     await vscode.env.clipboard.writeText(flow.url);
     await vscode.env.openExternal(vscode.Uri.parse(flow.url));
@@ -115,7 +116,7 @@ async function manualSignIn(
       ignoreFocusOut: true,
     });
     if (!callback) return;
-    await oauth.completeAuthorization(callback, flow, profile);
+    await attempt.complete(callback);
     provider.setActiveProfile(profile);
     provider.clearModelCache(profile);
     provider.fireDidChange();

@@ -18,6 +18,7 @@ This native VS Code `LanguageModelChatProvider` handles OpenAI OAuth locally and
 ## Highlights
 
 - ChatGPT OAuth with PKCE, automatic refresh, and VS Code Secret Storage
+- Multiple named Codex Bridge entries for separate ChatGPT accounts
 - Live Codex model discovery with six-hour persisted models.dev enrichment
 - Streaming text, reasoning summaries, images, and agent-mode tool calls
 - Per-model reasoning effort, summary, Speed Mode, Web Search, and Image Generation controls
@@ -29,8 +30,9 @@ This native VS Code `LanguageModelChatProvider` handles OpenAI OAuth locally and
 ## Quick start
 
 1. Install [Codex Bridge for Copilot Chat](https://marketplace.visualstudio.com/items?itemName=grikomsn.openai-oauth-copilot-chat). You need VS Code 1.125 or newer, GitHub Copilot Chat, and a ChatGPT account with Codex access.
-2. Run **Codex Bridge: Manage Connection** and complete **Sign in with ChatGPT**. Use manual sign-in if local port `1455` is unavailable.
-3. Open Copilot Chat, select **Manage Models**, enable **Codex Bridge**, and choose a Codex model.
+2. Run **Codex Bridge: Add ChatGPT Account**, choose a short profile ID such as `personal`, and complete sign-in. Use manual sign-in if local port `1455` is unavailable.
+3. Open **Chat: Manage Language Models**, select **Add Models → Codex Bridge**, name the entry, and enter the same profile ID.
+4. Repeat those steps with another profile ID to keep work and personal ChatGPT accounts available side by side.
 
 The authenticated Codex catalog remains authoritative. Composer controls override workspace defaults; reasoning defaults to High when supported, while hosted Web Search and Image Generation remain off until enabled. Click the Codex status-bar item to inspect five-hour and weekly quota, reset timing, and tokens observed by this extension.
 

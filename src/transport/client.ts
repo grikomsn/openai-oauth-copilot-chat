@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
 import type { OpenAIOAuth } from "../auth/auth";
+import { DEFAULT_OAUTH_PROFILE } from "../auth/auth";
 import { createPromptCacheTransportHeaders } from "../features/prompt-cache";
 import {
   CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL,
@@ -24,8 +25,8 @@ export class CodexTransport {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  sendModels(cancellation: vscode.CancellationToken): Promise<Response> {
-    return this.withAuthRetry((credentials) => this.fetchWithCancellation(chatgptCodexModelsUrl(CODEX_MODELS_CLIENT_VERSION), {
+  sendModels(cancellation: vscode.CancellationToken, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
+    return this.withAuthRetry(profile, (credentials) => this.fetchWithCancellation(chatgptCodexModelsUrl(CODEX_MODELS_CLIENT_VERSION), {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         Originator: OAUTH_ORIGINATOR,
@@ -34,14 +35,14 @@ export class CodexTransport {
     }, cancellation));
   }
 
-  sendUsage(): Promise<Response> {
-    return this.withAuthRetry((credentials) => this.fetcher(CHATGPT_CODEX_USAGE_URL, {
+  sendUsage(profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
+    return this.withAuthRetry(profile, (credentials) => this.fetcher(CHATGPT_CODEX_USAGE_URL, {
       headers: this.authHeaders(credentials, "application/json"),
     }));
   }
 
-  sendResetCredits(): Promise<Response> {
-    return this.withAuthRetry((credentials) => this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
+  sendResetCredits(profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
+    return this.withAuthRetry(profile, (credentials) => this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         Originator: OAUTH_ORIGINATOR,
@@ -50,8 +51,8 @@ export class CodexTransport {
     }));
   }
 
-  sendResetCreditConsume(body: (accountId: string | undefined) => string): Promise<Response> {
-    return this.withAuthRetry((credentials) => this.fetcher(CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL, {
+  sendResetCreditConsume(body: (accountId: string | undefined) => string, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
+    return this.withAuthRetry(profile, (credentials) => this.fetcher(CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL, {
       method: "POST",
       headers: {
         ...this.authHeaders(credentials, "application/json"),
@@ -63,8 +64,8 @@ export class CodexTransport {
     }));
   }
 
-  sendResponse(body: Record<string, unknown>, cancellation: vscode.CancellationToken): Promise<Response> {
-    return this.withAuthRetry((credentials) => {
+  sendResponse(body: Record<string, unknown>, cancellation: vscode.CancellationToken, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
+    return this.withAuthRetry(profile, (credentials) => {
       const promptCacheKey = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : undefined;
       const transportHeaders = promptCacheKey
         ? createPromptCacheTransportHeaders(promptCacheKey)
@@ -82,9 +83,12 @@ export class CodexTransport {
     });
   }
 
-  private async withAuthRetry(request: (credentials: OAuthCredentials) => Promise<Response>): Promise<Response> {
-    let response = await request(await this.oauth.getAccessToken());
-    if (response.status === 401) response = await request(await this.oauth.getAccessToken(true));
+  private async withAuthRetry(
+    profile: string,
+    request: (credentials: OAuthCredentials) => Promise<Response>,
+  ): Promise<Response> {
+    let response = await request(await this.oauth.getAccessToken(false, profile));
+    if (response.status === 401) response = await request(await this.oauth.getAccessToken(true, profile));
     return response;
   }
 

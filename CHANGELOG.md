@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+### Minor Changes
+
+- b3b0c21: Add native named Codex Bridge provider entries with isolated ChatGPT OAuth profiles, model catalogs, refreshes, and usage state.
+
 ## 0.9.0
 
 ### Minor Changes

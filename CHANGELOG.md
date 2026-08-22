@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1
+
+### Patch Changes
+
+- 403427d: Restore the selected profile for usage and management after restart, clarify that native model entries retain their own account routing, and keep legacy default entries valid.
+
 ## 0.10.0
 
 ### Minor Changes

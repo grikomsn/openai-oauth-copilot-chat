@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.2
+
+### Patch Changes
+
+- 4b02c13: Add an optional Codex model-catalog client version setting.
+
 ## 0.10.1
 
 ### Patch Changes

@@ -32,6 +32,7 @@ import {
   type CodexUsageSnapshot,
 } from "./usage/domain";
 import { CodexTransport } from "./transport/client";
+import { codexModelsClientVersion } from "./transport/protocol";
 import { CatalogCache } from "./models/catalog-cache";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
 import { activeProfileFromState, profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
@@ -87,6 +88,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       oauth,
       userAgent,
       () => configuration().get("requestTimeoutSeconds", 600),
+      () => codexModelsClientVersion(configuration().get<string>("codexVersion")),
       fetcher,
     );
     this.metadata = new ModelsDevMetadata(metadataCache, fetcher);

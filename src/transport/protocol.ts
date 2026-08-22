@@ -1,5 +1,7 @@
 /** Stable protocol identity and endpoint constants for this extension. */
 
+const CODEX_RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
 export const EXTENSION_DISPLAY_NAME = "Codex Bridge for Copilot Chat";
 export const EXTENSION_PRODUCT_ID = "openai-oauth-copilot-chat";
 export const OAUTH_ORIGINATOR = EXTENSION_PRODUCT_ID;
@@ -12,6 +14,7 @@ export const OPENAI_REDIRECT_URI = "http://localhost:1455/auth/callback";
 /**
  * Codex client version sent to the live model directory.
  * Update this checked-in value manually with `npm run update-codex-version`.
+ * Users can temporarily override it with `openaiCodex.codexVersion`.
  *
  * @example
  * ```ts
@@ -20,7 +23,7 @@ export const OPENAI_REDIRECT_URI = "http://localhost:1455/auth/callback";
  *
  * @see {@link chatgptCodexModelsUrl}
  */
-export const CODEX_MODELS_CLIENT_VERSION = "0.146.0";
+export const CODEX_MODELS_CLIENT_VERSION = "0.149.0";
 export const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 export const CHATGPT_CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 export const CHATGPT_CODEX_RESET_CREDITS_URL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
@@ -31,14 +34,20 @@ export const CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL = `${CHATGPT_CODEX_RESET_CRE
  *
  * @example
  * ```ts
- * chatgptCodexModelsUrl("0.146.0");
- * // "https://chatgpt.com/backend-api/codex/models?client_version=0.146.0"
+ * chatgptCodexModelsUrl("0.149.0");
+ * // "https://chatgpt.com/backend-api/codex/models?client_version=0.149.0"
  * ```
  *
  * @see {@link CODEX_MODELS_CLIENT_VERSION}
  */
 export function chatgptCodexModelsUrl(clientVersion: string): string {
   return `https://chatgpt.com/backend-api/codex/models?client_version=${encodeURIComponent(clientVersion)}`;
+}
+
+/** Resolves an optional VS Code override for the live Codex model directory. */
+export function codexModelsClientVersion(configuredVersion: string | undefined): string {
+  const version = configuredVersion?.trim();
+  return version && CODEX_RELEASE_VERSION_PATTERN.test(version) ? version : CODEX_MODELS_CLIENT_VERSION;
 }
 
 /**

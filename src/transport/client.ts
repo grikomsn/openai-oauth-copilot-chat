@@ -10,7 +10,6 @@ import {
   CHATGPT_CODEX_RESET_CREDITS_URL,
   CHATGPT_CODEX_RESPONSES_URL,
   CHATGPT_CODEX_USAGE_URL,
-  CODEX_MODELS_CLIENT_VERSION,
   OAUTH_ORIGINATOR,
   chatgptCodexModelsUrl,
 } from "./protocol";
@@ -22,15 +21,17 @@ export class CodexTransport {
     private readonly oauth: OpenAIOAuth,
     private readonly userAgent: string,
     private readonly requestTimeoutSeconds: () => number,
+    private readonly codexModelsClientVersion: () => string,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
   sendModels(cancellation: vscode.CancellationToken, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
-    return this.withAuthRetry(profile, (credentials) => this.fetchWithCancellation(chatgptCodexModelsUrl(CODEX_MODELS_CLIENT_VERSION), {
+    const clientVersion = this.codexModelsClientVersion();
+    return this.withAuthRetry(profile, (credentials) => this.fetchWithCancellation(chatgptCodexModelsUrl(clientVersion), {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         Originator: OAUTH_ORIGINATOR,
-        Version: CODEX_MODELS_CLIENT_VERSION,
+        Version: clientVersion,
       },
     }, cancellation));
   }

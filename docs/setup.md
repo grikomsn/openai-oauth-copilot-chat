@@ -34,6 +34,11 @@ not registered.
 reused before the next discovery request. If a refresh fails, the last usable catalog
 remains available.
 
+`openaiCodex.codexVersion` optionally overrides the Codex client version sent while
+loading the live model catalog. Leave it empty (the default) to use the version bundled
+with the extension. Set it only to test a known Codex release version, for example
+`"openaiCodex.codexVersion": "0.149.0"`; changing it clears the catalog cache.
+
 The live Codex directory remains authoritative for availability, limits, capabilities,
 and reasoning levels. The extension uses a six-hour, stale-while-revalidate models.dev
 snapshot in VS Code `globalState` only to fill metadata omitted by the live directory.

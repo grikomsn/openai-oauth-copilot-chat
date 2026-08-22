@@ -13,3 +13,12 @@ export function profileQualifiedModelId(profile: string, modelId: string): strin
   const normalized = normalizeProfileId(profile);
   return normalized === DEFAULT_OAUTH_PROFILE ? modelId : `${normalized}::${modelId}`;
 }
+
+/** Restores a command-management profile without allowing stale state to prevent activation. */
+export function activeProfileFromState(value: unknown): string {
+  try {
+    return typeof value === "string" ? normalizeProfileId(value) : DEFAULT_OAUTH_PROFILE;
+  } catch {
+    return DEFAULT_OAUTH_PROFILE;
+  }
+}

@@ -158,9 +158,6 @@
         "displayName": "Codex Bridge",
         "configuration": {
           "type": "object",
-          "required": [
-            "profile"
-          ],
           "properties": {
             "profile": {
               "type": "string",

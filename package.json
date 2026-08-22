@@ -81,6 +81,12 @@
     "configuration": {
       "title": "Codex Bridge for Copilot Chat",
       "properties": {
+        "openaiCodex.codexVersion": {
+          "type": "string",
+          "default": "",
+          "pattern": "^(?:\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)?$",
+          "description": "Optional Codex client version for the live model catalog. Leave empty to use the extension's checked-in version."
+        },
         "openaiCodex.reasoningEffort": {
           "type": "string",
           "enum": [

@@ -4,7 +4,7 @@
 
 Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload VS Code.
 
-Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account a profile ID. After sign-in, run **Chat: Manage Language Models**, choose **Add Models → Codex Bridge**, and enter the same profile ID. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window.
+Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account a profile ID. After sign-in, run **Chat: Manage Language Models**, choose **Add Models → Codex Bridge**, and enter the same profile ID. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window. Leaving the profile field empty preserves the legacy `default` account.
 
 The `default` profile preserves an existing single-account session, but after upgrading you must add a Codex Bridge entry in **Chat: Manage Language Models** and use `default` as its profile ID. **Codex Bridge: Select Active Profile** chooses which account the status bar and management commands display; model requests always use the account attached to the selected Language Models entry.
 
@@ -13,7 +13,7 @@ effort controls default to High when the model supports it; otherwise the catalo
 is retained. Models
 that advertise the `fast` additional speed tier expose a native **Speed Mode** control
 with Normal and Fast choices. Selecting Fast requests faster processing with increased
-account usage without adding a separate Fast model entry.
+account usage without adding a separate Fast model entry. The selected **profile for usage and management** is restored after restart; it never changes the account attached to a model entry.
 
 The `openaiCodex.reasoningSummary` setting controls the Responses API
 `reasoning.summary` value. `auto`, `concise`, and `detailed` request the corresponding

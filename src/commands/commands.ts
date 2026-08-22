@@ -36,7 +36,7 @@ async function manage(
   const profile = provider.getActiveProfile();
   const session = await oauth.sessionInfo(profile);
   const picked = await vscode.window.showQuickPick(session ? [
-    { label: "$(account) Switch profile", action: "switch" },
+    { label: "$(account) Select profile for usage and management", action: "switch" },
     { label: "$(add) Add ChatGPT account", action: "add" },
     { label: "$(pulse) Show Codex usage", action: "usage" },
     { label: "$(check) Test Codex connection", action: "test" },
@@ -45,7 +45,7 @@ async function manage(
     { label: "$(sign-out) Sign out of Codex Bridge", action: "signout" },
   ] : [
     { label: "$(globe) Sign in with ChatGPT", action: "signin", description: `Profile: ${profile}` },
-    { label: "$(account) Switch profile", action: "switch" },
+    { label: "$(account) Select profile for usage and management", action: "switch" },
     { label: "$(add) Add ChatGPT account", action: "add" },
     { label: "$(link) Sign in manually", action: "manual", description: "Use if localhost:1455 is unavailable" },
     { label: "$(terminal) Import Codex CLI session (Advanced)", action: "import", description: "Copies OAuth credentials from ~/.codex/auth.json" },

@@ -6,9 +6,11 @@ import { OpenAICodexProvider } from "./provider";
 import { EXTENSION_DISPLAY_NAME, extensionUserAgent } from "./transport/protocol";
 import { formatUsageStatusBar, formatUsageTooltip } from "./usage/presentation";
 import { usageSnapshotForPersistence, type CodexUsageSnapshot } from "./usage/domain";
+import { activeProfileFromState } from "./provider-profile";
 
 const LEGACY_USAGE_STATE_KEY = "openaiCodex.usageSnapshot.v1";
 const USAGE_STATE_KEY = "openaiCodex.usageSnapshots.v2";
+const ACTIVE_PROFILE_STATE_KEY = "openaiCodex.activeProfile.v1";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Codex Bridge");
@@ -16,12 +18,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const version = context.extension.packageJSON.version as string;
   const storedUsage = context.globalState.get<Readonly<Record<string, CodexUsageSnapshot>>>(USAGE_STATE_KEY)
     ?? { [DEFAULT_OAUTH_PROFILE]: context.globalState.get<CodexUsageSnapshot>(LEGACY_USAGE_STATE_KEY) ?? {} };
+  const activeProfile = activeProfileFromState(context.globalState.get<unknown>(ACTIVE_PROFILE_STATE_KEY));
   const provider = new OpenAICodexProvider(
     oauth,
     output,
     extensionUserAgent(version, vscode.version),
     storedUsage,
     context.globalState,
+    fetch,
+    activeProfile,
   );
   const usageStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 91);
   usageStatus.name = "Codex Bridge usage";
@@ -31,6 +36,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     usageStatus,
+    provider.onDidChangeActiveProfile((profile) => {
+      void context.globalState.update(ACTIVE_PROFILE_STATE_KEY, profile);
+    }),
     provider.onDidChangeUsage(({ profile, usage }) => {
       if (profile === provider.getActiveProfile()) renderUsageStatus(usageStatus, usage);
       updateUsageStatusVisibility(usageStatus);
@@ -50,7 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
   output.appendLine(`[activate] ${EXTENSION_DISPLAY_NAME} ${version} on VS Code ${vscode.version}`);
-  void oauth.hasSession().then((signedIn) => {
+  void oauth.hasSession(provider.getActiveProfile()).then((signedIn) => {
     if (!signedIn) return;
     updateUsageStatusVisibility(usageStatus);
     void provider.refreshUsage().catch((error) => output.appendLine(`[usage] initial refresh failed: ${messageOf(error)}`));

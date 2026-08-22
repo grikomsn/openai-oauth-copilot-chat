@@ -34,7 +34,7 @@ import {
 import { CodexTransport } from "./transport/client";
 import { CatalogCache } from "./models/catalog-cache";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
-import { profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
+import { activeProfileFromState, profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
 
 /** Live model information registered with VS Code Chat. */
 export interface CodexModel extends vscode.LanguageModelChatInformation {
@@ -60,13 +60,15 @@ export interface CodexModel extends vscode.LanguageModelChatInformation {
 export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<CodexModel> {
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   private readonly usageEmitter = new vscode.EventEmitter<{ profile: string; usage: CodexUsageSnapshot }>();
+  private readonly activeProfileEmitter = new vscode.EventEmitter<string>();
   readonly onDidChangeLanguageModelChatInformation = this.changeEmitter.event;
   readonly onDidChangeUsage = this.usageEmitter.event;
+  readonly onDidChangeActiveProfile = this.activeProfileEmitter.event;
   private readonly usageByProfile = new Map<string, CodexUsageSnapshot>();
   private readonly lastQuotaFetchAt = new Map<string, number>();
   private readonly modelCaches = new Map<string, CatalogCache<CodexModelMetadata[]>>();
   private readonly modelCacheAccounts = new Map<string, string>();
-  private activeProfile = DEFAULT_OAUTH_PROFILE;
+  private activeProfile: string;
   private readonly transport: CodexTransport;
   private readonly metadata: ModelsDevMetadata;
 
@@ -77,8 +79,10 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     initialUsage: Readonly<Record<string, CodexUsageSnapshot>> = {},
     metadataCache: MetadataCache = memoryMetadataCache(),
     fetcher: typeof fetch = fetch,
+    initialActiveProfile: unknown = DEFAULT_OAUTH_PROFILE,
   ) {
     for (const [profile, usage] of Object.entries(initialUsage)) this.usageByProfile.set(profile, usage);
+    this.activeProfile = activeProfileFromState(initialActiveProfile);
     this.transport = new CodexTransport(
       oauth,
       userAgent,
@@ -120,6 +124,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
   setActiveProfile(profile: string): void {
     this.activeProfile = normalizeProfileId(profile);
+    this.activeProfileEmitter.fire(this.activeProfile);
     this.usageEmitter.fire({ profile: this.activeProfile, usage: this.getUsageSnapshot() });
   }
 

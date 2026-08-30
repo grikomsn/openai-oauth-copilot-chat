@@ -47,7 +47,7 @@
       },
       {
         "command": "openaiCodex.selectProfile",
-        "title": "Codex Bridge: Select Active Profile"
+        "title": "Codex Bridge: Select Profile for Usage and Management"
       },
       {
         "command": "openaiCodex.signIn",

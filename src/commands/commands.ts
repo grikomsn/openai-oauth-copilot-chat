@@ -179,11 +179,15 @@ async function selectProfile(oauth: OpenAIOAuth, provider: OpenAICodexProvider):
       const session = await oauth.sessionInfo(profile);
       return { label: profile, description: session?.email ?? "Signed in", profile };
     })),
-    { title: "Select the active Codex Bridge profile" },
+    { title: "Select the Codex Bridge profile for usage and management" },
   );
   if (!picked) return;
   provider.setActiveProfile(picked.profile);
-  vscode.window.showInformationMessage(`Codex Bridge profile “${picked.profile}” is now active for usage and management commands.`);
+  const choose = await vscode.window.showInformationMessage(
+    `Codex Bridge profile “${picked.profile}” is now active for usage and management. Chat requests keep using the account attached to the selected model entry.`,
+    "Choose Chat Model",
+  );
+  if (choose === "Choose Chat Model") await vscode.commands.executeCommand("workbench.action.chat.openModelPicker");
 }
 
 async function promptProfileId(): Promise<string | undefined> {

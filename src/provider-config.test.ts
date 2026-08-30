@@ -5,12 +5,19 @@ import { activeProfileFromState, profileFromConfiguration, profileQualifiedModel
 
 test("declares optional native profile configuration without a management-command override", () => {
   const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
-    contributes: { languageModelChatProviders: Array<Record<string, unknown>> };
+    contributes: {
+      commands: Array<{ command: string; title: string }>;
+      languageModelChatProviders: Array<Record<string, unknown>>;
+    };
   };
   const provider = manifest.contributes.languageModelChatProviders.find((item) => item.vendor === "openai-codex");
   assert.ok(provider);
   assert.equal(provider.managementCommand, undefined);
   assert.equal((provider.configuration as { required?: string[] }).required, undefined);
+  assert.match(
+    manifest.contributes.commands.find((item) => item.command === "openaiCodex.selectProfile")?.title ?? "",
+    /Usage and Management/,
+  );
 });
 
 test("declares an optional Codex client-version override", () => {

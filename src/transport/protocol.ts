@@ -23,7 +23,7 @@ export const OPENAI_REDIRECT_URI = "http://localhost:1455/auth/callback";
  *
  * @see {@link chatgptCodexModelsUrl}
  */
-export const CODEX_MODELS_CLIENT_VERSION = "0.149.0";
+export const CODEX_MODELS_CLIENT_VERSION = "0.151.0";
 export const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 export const CHATGPT_CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 export const CHATGPT_CODEX_RESET_CREDITS_URL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";

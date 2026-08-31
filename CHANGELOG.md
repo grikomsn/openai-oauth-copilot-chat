@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.4
+
+### Patch Changes
+
+- 6a99adc: Refresh the live Codex model catalog with the latest client version.
+
 ## 0.10.3
 
 ### Patch Changes

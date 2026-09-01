@@ -26,6 +26,7 @@ export class ResponsesStreamParser {
   private buffer = "";
   private readonly toolArguments = new Map<string, string>();
   private readonly imageGenerationCalls = new Set<string>();
+  private textDeltaSeen = false;
 
   /**
    * Adds a transport chunk and returns every complete event it contains.
@@ -66,7 +67,10 @@ export class ResponsesStreamParser {
     }
     const type = typeof value.type === "string" ? value.type : "";
     const delta = typeof value.delta === "string" ? value.delta : "";
-    if (type === "response.output_text.delta" && delta) return [{ text: delta }];
+    if (type === "response.output_text.delta" && delta) {
+      this.textDeltaSeen = true;
+      return [{ text: delta }];
+    }
     if ((type === "response.reasoning_summary_text.delta" || type === "response.reasoning_text.delta") && delta) {
       return [{ reasoning: delta }];
     }
@@ -112,8 +116,13 @@ export class ResponsesStreamParser {
       if (Array.isArray(output)) {
         for (const item of output) {
           if (item && typeof item === "object" && !Array.isArray(item)) {
-            const imageEvent = imageGenerationEvent(item as Record<string, unknown>, this.imageGenerationCalls);
+            const outputItem = item as Record<string, unknown>;
+            const imageEvent = imageGenerationEvent(outputItem, this.imageGenerationCalls);
             if (imageEvent) events.push(imageEvent);
+            if (!this.textDeltaSeen) {
+              const text = responseOutputText(outputItem);
+              if (text) events.push({ text });
+            }
           }
         }
       }
@@ -127,6 +136,16 @@ export class ResponsesStreamParser {
     }
     return undefined;
   }
+}
+
+function responseOutputText(item: Record<string, unknown>): string | undefined {
+  if (item.type !== "message" || !Array.isArray(item.content)) return undefined;
+  const text = item.content.flatMap((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const part = value as Record<string, unknown>;
+    return (part.type === "output_text" || part.type === "text") && typeof part.text === "string" ? [part.text] : [];
+  }).join("");
+  return text || undefined;
 }
 
 function recordField(value: Record<string, unknown>, key: string): Record<string, unknown> | undefined {

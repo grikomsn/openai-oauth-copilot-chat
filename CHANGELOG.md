@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.6
+
+### Patch Changes
+
+- 2d1ee8c: Register model-specific OpenAI token pricing and relative cost tiers with VS Code.
+
 ## 0.10.5
 
 ### Patch Changes

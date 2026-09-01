@@ -79,3 +79,18 @@ test("extracts Responses API inference usage from the completed event", () => {
   const events = parser.push('data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150}}}\n\n');
   assert.deepEqual(events, [{ usage: { input_tokens: 120, output_tokens: 30, total_tokens: 150 } }]);
 });
+
+test("recovers completed response text when no text delta was delivered", () => {
+  const parser = new ResponsesStreamParser();
+  const events = parser.push('data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"recovered"}]}]}}\n\n');
+  assert.deepEqual(events, [{ text: "recovered" }]);
+});
+
+test("does not repeat completed response text after streaming deltas", () => {
+  const parser = new ResponsesStreamParser();
+  const events = parser.push([
+    'data: {"type":"response.output_text.delta","delta":"answer"}',
+    'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"answer"}]}]}}',
+  ].join("\n\n") + "\n\n");
+  assert.deepEqual(events, [{ text: "answer" }]);
+});

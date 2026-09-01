@@ -80,7 +80,7 @@ export class CodexTransport {
           ...transportHeaders,
         },
         body: JSON.stringify(body),
-      }, cancellation);
+      }, cancellation, true);
     });
   }
 
@@ -106,16 +106,41 @@ export class CodexTransport {
     url: string,
     init: RequestInit,
     cancellation: vscode.CancellationToken,
+    retryTransient = false,
   ): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.max(10, this.requestTimeoutSeconds()) * 1000);
     const listener = cancellation.onCancellationRequested(() => controller.abort());
     if (cancellation.isCancellationRequested) controller.abort();
     try {
-      return await this.fetcher(url, { ...init, signal: controller.signal });
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          return await this.fetcher(url, { ...init, signal: controller.signal });
+        } catch (error) {
+          if (!retryTransient || attempt >= 2 || controller.signal.aborted || !isTransientNetworkError(error)) throw error;
+          await waitForRetry(250 * 2 ** attempt, controller.signal);
+        }
+      }
     } finally {
       clearTimeout(timeout);
       listener.dispose();
     }
   }
+}
+
+function isTransientNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error) || error.name === "AbortError") return false;
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const detail = `${error.name}: ${error.message} ${cause instanceof Error ? `${cause.name}: ${cause.message}` : ""}`;
+  return /fetch failed|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET|socket hang up/i.test(detail);
+}
+
+function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, delay);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
 }

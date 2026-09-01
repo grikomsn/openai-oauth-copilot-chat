@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.5
+
+### Patch Changes
+
+- fa3c551: Recover final Responses API text when deltas are missing and retry transient inference connection failures before a response is received.
+
 ## 0.10.4
 
 ### Patch Changes

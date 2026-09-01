@@ -35,6 +35,7 @@ import { CodexTransport } from "./transport/client";
 import { codexModelsClientVersion } from "./transport/protocol";
 import { CatalogCache } from "./models/catalog-cache";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
+import { modelPricingFields, openAIModelCost } from "./models/pricing";
 import { activeProfileFromState, profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
 
 /** Live model information registered with VS Code Chat. */
@@ -227,6 +228,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         maxInputTokens: model.input,
         maxOutputTokens: model.output,
         isUserSelectable: true,
+        ...(modelPricingFields(openAIModelCost(model.rawModelId, model.cost)) ?? {}),
         isBYOK: true,
         requiresAuthorization: { label: `Codex Bridge (${profile})` },
         configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),

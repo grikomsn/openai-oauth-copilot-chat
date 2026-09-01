@@ -7,6 +7,10 @@ declare module "vscode" {
   export interface LanguageModelChatInformation {
     readonly requiresAuthorization?: true | { label: string };
     readonly pricing?: string;
+    readonly inputCost?: number;
+    readonly outputCost?: number;
+    readonly cacheCost?: number;
+    readonly priceCategory?: string;
     readonly isUserSelectable?: boolean;
     readonly configurationSchema?: LanguageModelConfigurationSchema;
     readonly targetChatSessionType?: string;

@@ -1,3 +1,5 @@
+import type { ModelCost } from "./pricing";
+
 export const MODELS_DEV_API_URL = "https://models.dev/api.json";
 export const MODELS_DEV_CACHE_KEY = "openaiCodex.modelsDevMetadata.v1";
 export const MODELS_DEV_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -17,6 +19,7 @@ export interface ModelsDevModelMetadata {
   readonly reasoningOptions?: readonly string[];
   readonly releaseDate?: string;
   readonly lastUpdated?: string;
+  readonly cost?: ModelCost;
 }
 
 export interface ModelsDevSnapshot {
@@ -114,6 +117,7 @@ function normalizeModel(key: string, value: unknown): ModelsDevModelMetadata | u
   if (!id) return undefined;
   const modalities = asRecord(raw.modalities);
   const limit = asRecord(raw.limit);
+  const cost = normalizeCost(asRecord(raw.cost));
   return {
     id,
     name: optionalString(raw.name),
@@ -128,6 +132,7 @@ function normalizeModel(key: string, value: unknown): ModelsDevModelMetadata | u
     reasoningOptions: normalizeReasoningOptions(raw.reasoning_options),
     releaseDate: optionalString(raw.release_date),
     lastUpdated: optionalString(raw.last_updated),
+    ...(cost ? { cost } : {}),
   };
 }
 
@@ -138,6 +143,7 @@ function parseCachedModel(key: string, value: unknown): ModelsDevModelMetadata |
   if (!id || !validOptionalNumber(raw.contextLength) || !validOptionalNumber(raw.maxInputTokens) || !validOptionalNumber(raw.maxOutputTokens)) return undefined;
   if (!validOptionalBoolean(raw.imageInput) || !validOptionalBoolean(raw.toolCalling) || !validOptionalBoolean(raw.reasoning)) return undefined;
   if (raw.reasoningOptions !== undefined && !isStringArray(raw.reasoningOptions)) return undefined;
+  const cost = parseCost(raw.cost);
   return {
     id,
     name: optionalString(raw.name),
@@ -152,7 +158,26 @@ function parseCachedModel(key: string, value: unknown): ModelsDevModelMetadata |
     reasoningOptions: raw.reasoningOptions === undefined ? undefined : stringArray(raw.reasoningOptions),
     releaseDate: optionalString(raw.releaseDate),
     lastUpdated: optionalString(raw.lastUpdated),
+    ...(cost ? { cost } : {}),
   };
+}
+
+function normalizeCost(raw: Record<string, unknown> | undefined): ModelCost | undefined {
+  const input = optionalNonNegativeNumber(raw?.input);
+  const output = optionalNonNegativeNumber(raw?.output);
+  if (input === undefined || output === undefined) return undefined;
+  const cacheRead = optionalNonNegativeNumber(raw?.cache_read);
+  return { input, output, ...(cacheRead === undefined ? {} : { cacheRead }) };
+}
+
+function parseCost(value: unknown): ModelCost | undefined {
+  const raw = asRecord(value);
+  if (!raw) return undefined;
+  const input = optionalNonNegativeNumber(raw.input);
+  const output = optionalNonNegativeNumber(raw.output);
+  const cacheRead = optionalNonNegativeNumber(raw.cacheRead);
+  if (input === undefined || output === undefined) return undefined;
+  return { input, output, ...(cacheRead === undefined ? {} : { cacheRead }) };
 }
 
 function normalizeReasoningOptions(value: unknown): string[] | undefined {
@@ -177,6 +202,7 @@ function stringValue(value: unknown): string | undefined { return typeof value =
 function optionalString(value: unknown): string | undefined { return value === undefined ? undefined : stringValue(value); }
 function optionalBoolean(value: unknown): boolean | undefined { return typeof value === "boolean" ? value : undefined; }
 function optionalTokenCount(value: unknown): number | undefined { return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined; }
+function optionalNonNegativeNumber(value: unknown): number | undefined { return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined; }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
 function isStringArray(value: unknown): value is string[] { return Array.isArray(value) && value.every((item) => typeof item === "string"); }
 function validTimestamp(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }

@@ -1,6 +1,7 @@
 /** Model-directory types and normalization for the live Codex picker. */
 
 import type { ModelsDevModelMetadata } from "./metadata";
+import type { ModelCost } from "./pricing";
 
 /** Processing speed requested for a model. */
 export type SpeedMode = "normal" | "fast";
@@ -37,6 +38,7 @@ export interface CodexModelMetadata {
   priority: number;
   releaseDate?: string;
   lastUpdated?: string;
+  cost?: ModelCost;
 }
 
 /** A picker-ready model entry, including its selected speed mode. */
@@ -158,6 +160,7 @@ export function enrichCodexModel(model: CodexModelMetadata, metadata: ModelsDevM
     output,
     releaseDate: metadata.releaseDate,
     lastUpdated: metadata.lastUpdated,
+    cost: metadata.cost,
   };
 }
 

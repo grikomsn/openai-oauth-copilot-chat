@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 import { applyModelRequestOptions, type ModelRequestOptions } from "../models/options";
-import { buildPromptCacheRequestFields } from "../features/prompt-cache";
+import { buildPromptCacheRequestFields } from "./prompt-cache";
 import { buildClientTools } from "../tools/client-tools";
 import { buildHostedTools } from "../tools/hosted-tools";
 import { convertMessages } from "./messages";

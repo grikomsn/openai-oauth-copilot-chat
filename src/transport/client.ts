@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
 import type { OpenAIOAuth } from "../auth/auth";
 import { DEFAULT_OAUTH_PROFILE } from "../auth/auth";
-import { createPromptCacheTransportHeaders } from "../features/prompt-cache";
+import { createPromptCacheTransportHeaders } from "../provider/prompt-cache";
 import {
   CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL,
   CHATGPT_CODEX_RESET_CREDITS_URL,

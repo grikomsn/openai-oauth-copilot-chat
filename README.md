@@ -40,6 +40,7 @@ The authenticated Codex catalog remains authoritative. Composer controls overrid
 
 - [Setup, commands, settings, and troubleshooting](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/setup.md)
 - [OAuth and security](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/security.md)
+- [Models and pricing](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/models.md)
 - [Development and releases](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/development.md)
 
 ## Related projects

@@ -2,6 +2,7 @@
 
 import * as vscode from "vscode";
 import { applyModelRequestOptions, type ModelRequestOptions } from "../models/options";
+import { trimHistoryToFitContext } from "./history-trim";
 import { buildPromptCacheRequestFields } from "./prompt-cache";
 import { buildClientTools } from "../tools/client-tools";
 import { buildHostedTools } from "../tools/hosted-tools";
@@ -16,9 +17,13 @@ export function buildRequest(
   requestOptions: ModelRequestOptions,
   supportsParallelToolCalls: boolean,
   supportsReasoningSummaryParameter: boolean,
+  contextCapTokens?: number,
 ): Record<string, unknown> {
   const allTools = [...buildHostedTools(requestOptions), ...buildClientTools(options.tools)];
-  const convertedInput = convertMessages(messages);
+  let convertedInput = convertMessages(messages);
+  if (contextCapTokens !== undefined) {
+    convertedInput = [...trimHistoryToFitContext(convertedInput, contextCapTokens).items];
+  }
   const input = convertedInput.length
     ? convertedInput
     : [{ type: "message", role: "user", content: [{ type: "input_text", text: "" }] }];

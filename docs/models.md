@@ -38,3 +38,19 @@ models.dev enrichment and falls back to checked-in official OpenAI rates when
 no discovered cost is available. Costs are rendered as
 `In: $<input> · Out: $<output> /1M tokens` picker detail with a cached-input
 price when known, plus a low/medium/high/very-high price category.
+
+## Context window size
+
+Each model entry exposes a Context Window control in the Copilot Chat model
+picker (`src/models/options.ts`). The options are Auto (the default), fixed
+64K, 128K, and 200K tiers that fit below the model's registered input limit,
+and Maximum. Auto and Maximum keep the default behavior, where the full
+effective context limit from the live directory is available and the Codex
+backend compacts long sessions server-side.
+
+A specific tier acts as a local upper limit: the selection is stored per model
+by VS Code, never exceeds the model's registered input limit, and when the
+converted request input exceeds the selected tier the oldest conversation turns
+are trimmed before the request is built (`src/provider/history-trim.ts`). The
+first turn, the current turn, and tool-call/reasoning adjacency are always
+preserved, and models without a fitting tier keep their picker unchanged.

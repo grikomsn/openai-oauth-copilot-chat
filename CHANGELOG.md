@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1
+
+### Patch Changes
+
+- 8a46c28: Restore picker access to Fast mode on models with selectable context windows by pairing each reasoning effort with a Fast choice.
+
 ## 0.11.0
 
 ### Minor Changes

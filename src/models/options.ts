@@ -64,8 +64,8 @@ export function modelOptionSpec(
 
 /** A selectable context window tier shown on a model's picker configuration. */
 export interface ContextSizeOption {
-  /** Context cap in input tokens; 0 selects the model's default handling. */
-  readonly value: number;
+  /** Context cap in input tokens; "auto" selects the model's default handling. */
+  readonly value: number | "auto";
   /** Short picker label, e.g. "Auto", "128K", or "Maximum". */
   readonly label: string;
   /** Picker description for the tier. */
@@ -97,7 +97,8 @@ export function contextSizeOptions(maxInputTokens: number): ContextSizeOption[] 
   const tiers = CONTEXT_SIZE_TIERS.filter((tier) => tier.value < maxInputTokens);
   if (!tiers.length) return undefined;
   return [
-    { value: 0, label: "Auto", description: "Default context handling for this model." },
+    // VS Code treats every numeric contextSize, including zero, as an input budget.
+    { value: "auto", label: "Auto", description: "Default context handling for this model." },
     ...tiers.map((tier) => ({
       value: tier.value,
       label: tier.label,
@@ -213,8 +214,9 @@ export function buildModelConfigurationSchema(
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
   // Every Fast-capable model has one picker entry, so its Speed Mode toggle is
-  // always visible; legacy Fast defaults only choose the initial toggle value.
-  // Keep this in the tokens group because VS Code renders one control per group.
+  // available; legacy Fast defaults only choose the initial toggle value.
+  // VS Code renders one control per group; Context Window owns the tokens slot.
+  // Speed remains configurable through Manage Language Models.
   const exposesSpeedMode = spec.supportsFast;
   const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
   return {
@@ -254,17 +256,17 @@ export function buildModelConfigurationSchema(
             spec.fastDescription ?? "Faster generation with increased usage",
           ],
           default: defaultSpeedMode,
-          group: "tokens",
+          ...(contextOptions?.length ? {} : { group: "tokens" }),
         },
       } : {}),
       ...(contextOptions?.length ? {
         contextSize: {
-          type: "number",
+          type: ["string", "number"],
           title: "Context Window",
           enum: contextOptions.map((option) => option.value),
           enumItemLabels: contextOptions.map((option) => option.label),
           enumDescriptions: contextOptions.map((option) => option.description),
-          default: 0,
+          default: "auto",
           group: "tokens",
         },
       } : {}),

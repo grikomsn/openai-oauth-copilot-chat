@@ -60,3 +60,16 @@ converted request input exceeds the selected tier the oldest conversation turns
 are trimmed before the request is built (`src/provider/history-trim.ts`). The
 first turn, the current turn, and tool-call/reasoning adjacency are always
 preserved, and models without a fitting tier keep their picker unchanged.
+
+### Context indicator compatibility
+
+Auto uses the model's registered input budget. The context indicator shows that
+input budget plus the response reserve; a numeric context tier replaces only
+the input budget. Auto is stored as `"auto"`, because VS Code interprets numeric
+zero as a zero-token input window. If an existing chat still shows only the
+output limit after upgrading, select Auto again in its Context Window control
+to replace a saved zero selection.
+
+Context Window uses the dedicated tokens group so it remains visible beside
+reasoning controls. VS Code renders only one enum property per group.
+Speed Mode remains available by right-clicking the model in **Chat: Manage Language Models**.

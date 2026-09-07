@@ -39,6 +39,12 @@ no discovered cost is available. Costs are rendered as
 `In: $<input> · Out: $<output> /1M tokens` picker detail with a cached-input
 price when known, plus a low/medium/high/very-high price category.
 
+The checked-in fallback covers the current flagship and coding-tuned models,
+including `gpt-6-astra` ($10 / $50), `gpt-5.6-sol`/`gpt-5.6` ($4 / $20),
+`gpt-5.6-terra` ($2 / $12), `gpt-5.6-luna` ($0.20 / $1.20), and the
+`gpt-5.3-codex` family ($1.75 / $14). Rates are the official OpenAI standard
+per-million rates from the [OpenAI pricing page](https://developers.openai.com/api/docs/pricing).
+
 ## Context window size
 
 Each model entry exposes a Context Window control in the Copilot Chat model

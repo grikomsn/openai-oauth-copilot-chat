@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.0
+
+### Minor Changes
+
+- 989b769: Adds a Context Window picker control (Auto, 64K, 128K, 200K, Maximum) that caps how much conversation history each Codex request sends, clamped to the model's registered input limit.
+
+### Patch Changes
+
+- 989b769: Fix Auto context size being interpreted as zero input tokens by VS Code, collapsing the context indicator to the output reserve and triggering premature compaction.
+- 989b769: Reserves a minimum 8,192-token output budget when advertising model limits, so models whose auto-compact session budget fills the effective context window no longer show a zero-token output budget in the model picker.
+- 989b769: Add the latest flagship and coding-tuned OpenAI models (including `gpt-6-astra`) to the checked-in pricing fallback and bump the pinned Codex client version to the latest release.
+
 ## 0.10.6
 
 ### Patch Changes

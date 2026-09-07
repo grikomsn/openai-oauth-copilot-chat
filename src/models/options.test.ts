@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   applyModelRequestOptions,
   buildModelConfigurationSchema,
+  contextSizeOptions,
   modelOptionSpec,
+  resolveContextCap,
   resolveModelRequestOptions,
   type ModelOptionSpec,
 } from "./options";
@@ -35,6 +37,7 @@ test("resolves picker options and applies them to a Fast request", () => {
     reasoningSummary: "detailed",
     webSearch: true,
     imageGeneration: true,
+    contextSize: 0,
   });
   assert.deepEqual(applyModelRequestOptions({ model: "gpt-5.6-sol" }, options), {
     model: "gpt-5.6-sol",
@@ -67,7 +70,7 @@ test("falls back to the model option default and reads legacy picker values", ()
       { reasoningEffort: "adaptive", reasoningSummary: "model" },
       "normal",
     ),
-    { speedMode: "normal", reasoningEffort: "medium", reasoningSummary: "auto", webSearch: false, imageGeneration: false },
+    { speedMode: "normal", reasoningEffort: "medium", reasoningSummary: "auto", webSearch: false, imageGeneration: false, contextSize: 0 },
   );
   assert.equal(
     resolveModelRequestOptions(spec, { mode: "fast:adaptive" }, {}, "normal").reasoningEffort,
@@ -83,7 +86,7 @@ test("retains legacy workspace effort and speed fallbacks", () => {
       { reasoningEffort: "adaptive", speedMode: "fast", reasoningSummary: "model" },
       "normal",
     ),
-    { speedMode: "fast", reasoningEffort: "adaptive", reasoningSummary: "auto", webSearch: false, imageGeneration: false },
+    { speedMode: "fast", reasoningEffort: "adaptive", reasoningSummary: "auto", webSearch: false, imageGeneration: false, contextSize: 0 },
   );
   assert.equal(
     resolveModelRequestOptions({ ...spec, supportsFast: false }, undefined, { speedMode: "fast" }, "normal").speedMode,
@@ -102,6 +105,7 @@ test("builds picker controls from the live model metadata", () => {
     reasoningSummary: "concise",
     webSearch: false,
     imageGeneration: false,
+    contextSize: 0,
   });
 
   assert.deepEqual(schema.properties.reasoningEffort.enum, ["medium", "adaptive"]);
@@ -133,6 +137,7 @@ test("builds picker controls from the live model metadata", () => {
     reasoningSummary: "concise",
     webSearch: false,
     imageGeneration: false,
+    contextSize: 0,
   });
   assert.deepEqual(legacyFastDefaultSchema.properties.speedMode.enum, ["normal", "fast"]);
   assert.equal(legacyFastDefaultSchema.properties.speedMode.default, "fast");
@@ -189,4 +194,65 @@ test("omits reasoning summaries when disabled or unsupported", () => {
   assert.deepEqual(applyModelRequestOptions({}, detailed, false), {
     reasoning: { effort: "medium" },
   });
+});
+
+test("offers context tiers below the model input limit", () => {
+  const options = contextSizeOptions(244_800);
+
+  assert.deepEqual(options?.map((option) => option.value), ["auto", 65_536, 131_072, 200_000, 244_800]);
+  assert.deepEqual(options?.map((option) => option.label), ["Auto", "64K", "128K", "200K", "Maximum"]);
+});
+
+test("omits the context picker when no tier fits", () => {
+  assert.equal(contextSizeOptions(65_536), undefined);
+  assert.equal(contextSizeOptions(32_000), undefined);
+  assert.equal(contextSizeOptions(Number.NaN), undefined);
+  assert.deepEqual(contextSizeOptions(131_072)?.map((option) => option.value), ["auto", 65_536, 131_072]);
+});
+
+test("resolves the effective context cap from the selected tier", () => {
+  assert.equal(resolveContextCap(131_072, 244_800), 131_072);
+  assert.equal(resolveContextCap(300_000, 244_800), undefined);
+  assert.equal(resolveContextCap(0, 244_800), undefined);
+  assert.equal(resolveContextCap(-5, 244_800), undefined);
+  assert.equal(resolveContextCap(65_536.9, 244_800), 65_536);
+  assert.equal(resolveContextCap(65_536, 65_536), undefined);
+  assert.equal(resolveContextCap(131_072, Number.NaN), undefined);
+});
+
+test("parses the context size from request configuration only", () => {
+  assert.equal(resolveModelRequestOptions(spec, { contextSize: 131_072 }, {}, "normal").contextSize, 131_072);
+  assert.equal(resolveModelRequestOptions(spec, { contextSize: 0 }, {}, "normal").contextSize, 0);
+  assert.equal(resolveModelRequestOptions(spec, { contextSize: "131072" }, {}, "normal").contextSize, 0);
+  assert.equal(resolveModelRequestOptions(spec, undefined, { contextSize: 131_072 }, "normal").contextSize, 0);
+});
+
+test("exposes the Context Window control when tiers fit", () => {
+  const schema = buildModelConfigurationSchema(
+    spec,
+    { speedMode: "normal", reasoningEffort: "adaptive", reasoningSummary: "auto", webSearch: false, imageGeneration: false, contextSize: 0 },
+    contextSizeOptions(244_800),
+  );
+
+  assert.deepEqual(schema.properties.contextSize.enum, ["auto", 65_536, 131_072, 200_000, 244_800]);
+  assert.deepEqual(schema.properties.contextSize.enumItemLabels, ["Auto", "64K", "128K", "200K", "Maximum"]);
+  assert.equal(schema.properties.contextSize.default, "auto");
+  assert.equal(schema.properties.contextSize.group, "tokens");
+  assert.equal(Object.entries(schema!.properties!).find(([, property]) => property.group === "tokens")?.[0], "contextSize");
+
+  const plain = buildModelConfigurationSchema(spec);
+  assert.equal("contextSize" in plain.properties, false);
+});
+
+// Mirrors VS Code's context indicator contract: numeric selections replace input,
+// while a nonnumeric Auto selection falls back to the registered input limit.
+test("Auto preserves the full context window in the VS Code indicator", () => {
+  for (const input of [78_000, 244_800, 983_040]) {
+    const options = contextSizeOptions(input)!;
+    const auto = options.find((option) => option.label === "Auto")!;
+    const output = 16_384;
+    const displayedInput = typeof auto.value === "number" ? auto.value : input;
+    assert.equal(displayedInput + output, input + output);
+    assert.ok(options.every((option) => typeof option.value !== "number" || option.value > 0));
+  }
 });

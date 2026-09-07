@@ -6,7 +6,9 @@ import { messageOf, responseError } from "./errors";
 import {
   applyModelRequestOptions,
   buildModelConfigurationSchema,
+  contextSizeOptions,
   modelOptionSpec,
+  resolveContextCap,
   resolveModelRequestOptions,
   type ModelOptionSpec,
   type ModelRequestOptions,
@@ -231,7 +233,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         ...(modelPricingFields(openAIModelCost(model.rawModelId, model.cost)) ?? {}),
         isBYOK: true,
         requiresAuthorization: { label: `Codex Bridge (${profile})` },
-        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults),
+        configurationSchema: buildModelConfigurationSchema(optionSpec, defaults, contextSizeOptions(model.input)),
         capabilities: { imageInput: model.image, toolCalling: model.toolCalling },
         speedMode: model.speedMode,
         optionSpec,
@@ -248,6 +250,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     token: vscode.CancellationToken,
   ): Promise<void> {
     const requestOptions = resolveRequestOptions(model.optionSpec, model.speedMode, options.modelConfiguration);
+    const contextCap = resolveContextCap(requestOptions.contextSize, model.maxInputTokens);
     const body = buildRequest(
       model.rawModelId,
       messages,
@@ -255,13 +258,14 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       requestOptions,
       model.supportsParallelToolCalls,
       model.optionSpec.supportsReasoningSummaryParameter,
+      contextCap,
     );
     const response = await this.transport.sendResponse(body, token, model.profile);
     if (!response.ok) throw await responseError(`OpenAI Codex request failed for ${model.rawModelId}`, response);
     if (!response.body) throw new Error("OpenAI Codex returned an empty response stream");
 
     if (configuration().get("debugLogging", false)) {
-      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} imageGeneration=${requestOptions.imageGeneration} initiator=${options.requestInitiator ?? "unknown"}`);
+      this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} imageGeneration=${requestOptions.imageGeneration}${contextCap !== undefined ? ` contextCap=${contextCap}` : ""} initiator=${options.requestInitiator ?? "unknown"}`);
     }
     await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId, model.profile));
     if (Date.now() - (this.lastQuotaFetchAt.get(model.profile) ?? 0) > 60_000) {

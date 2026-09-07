@@ -28,6 +28,8 @@ export interface ModelRequestOptions {
   reasoningSummary: ReasoningSummary;
   webSearch: boolean;
   imageGeneration: boolean;
+  /** Opted-in context cap in input tokens; 0 keeps the model's default handling. */
+  contextSize: number;
 }
 
 /**
@@ -58,6 +60,75 @@ export function modelOptionSpec(
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
     defaultReasoningSummary: model.defaultReasoningSummary,
   };
+}
+
+/** A selectable context window tier shown on a model's picker configuration. */
+export interface ContextSizeOption {
+  /** Context cap in input tokens; "auto" selects the model's default handling. */
+  readonly value: number | "auto";
+  /** Short picker label, e.g. "Auto", "128K", or "Maximum". */
+  readonly label: string;
+  /** Picker description for the tier. */
+  readonly description: string;
+}
+
+/** Fixed context tiers offered below a model's input limit. */
+const CONTEXT_SIZE_TIERS: readonly { value: number; label: string }[] = [
+  { value: 65_536, label: "64K" },
+  { value: 131_072, label: "128K" },
+  { value: 200_000, label: "200K" },
+];
+
+/**
+ * Builds the context window tiers offered for a model's input limit.
+ * Returns undefined when no tier fits below the limit, so small models keep
+ * their picker unchanged.
+ *
+ * @example
+ * ```ts
+ * const options = contextSizeOptions(model.input);
+ * console.log(options?.map((option) => option.label));
+ * ```
+ *
+ * @see {@link resolveContextCap}
+ */
+export function contextSizeOptions(maxInputTokens: number): ContextSizeOption[] | undefined {
+  if (!Number.isFinite(maxInputTokens) || maxInputTokens <= CONTEXT_SIZE_TIERS[0].value) return undefined;
+  const tiers = CONTEXT_SIZE_TIERS.filter((tier) => tier.value < maxInputTokens);
+  if (!tiers.length) return undefined;
+  return [
+    // VS Code treats every numeric contextSize, including zero, as an input budget.
+    { value: "auto", label: "Auto", description: "Default context handling for this model." },
+    ...tiers.map((tier) => ({
+      value: tier.value,
+      label: tier.label,
+      description: `Keep the conversation under ${tier.label} input tokens.`,
+    })),
+    {
+      value: maxInputTokens,
+      label: "Maximum",
+      description: "Use the model's full available input limit.",
+    },
+  ];
+}
+
+/**
+ * Resolves the effective context cap for a request.
+ * Auto (0) and "Maximum" (the model's full input limit) keep the default
+ * streaming behavior, so only strictly smaller tiers return a cap.
+ *
+ * @example
+ * ```ts
+ * const cap = resolveContextCap(options.contextSize, model.maxInputTokens);
+ * ```
+ *
+ * @see {@link contextSizeOptions}
+ */
+export function resolveContextCap(contextSize: number, maxInputTokens: number): number | undefined {
+  if (!Number.isFinite(contextSize) || contextSize <= 0) return undefined;
+  if (!Number.isFinite(maxInputTokens) || maxInputTokens <= 0) return undefined;
+  const cap = Math.min(Math.floor(contextSize), maxInputTokens);
+  return cap < maxInputTokens ? cap : undefined;
 }
 
 /**
@@ -97,6 +168,7 @@ export function resolveModelRequestOptions(
   const requestedSpeed = parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
     ?? legacyMode?.speedMode
     ?? parseConfiguredSpeed(stringOption(workspaceDefaults, "speedMode"));
+  const requestedContextSize = parseConfiguredContextSize(numberOption(requestConfiguration, "contextSize"));
   // A registered Fast variant is authoritative; settings cannot turn it back into a normal request.
   return {
     reasoningEffort: requestedEffort && spec.efforts.includes(requestedEffort)
@@ -110,16 +182,18 @@ export function resolveModelRequestOptions(
     speedMode: speedMode === "fast"
       ? "fast"
       : spec.supportsFast && requestedSpeed === "fast" ? "fast" : "normal",
+    contextSize: requestedContextSize ?? 0,
   };
 }
 
 /**
  * Builds the per-model configuration schema shown by the Copilot Chat picker.
- * Unsupported reasoning-summary controls are intentionally omitted.
+ * Unsupported reasoning-summary controls are intentionally omitted. Optional
+ * context tiers add a Context Window control to the tokens group.
  *
  * @example
  * ```ts
- * const schema = buildModelConfigurationSchema(spec, defaults);
+ * const schema = buildModelConfigurationSchema(spec, defaults, contextSizeOptions(model.input));
  * console.log(schema.properties.reasoningEffort.enum);
  * console.log(schema.properties.speedMode.enum);
  * ```
@@ -130,6 +204,7 @@ export function resolveModelRequestOptions(
 export function buildModelConfigurationSchema(
   spec: ModelOptionSpec,
   defaults?: ModelRequestOptions,
+  contextOptions?: readonly ContextSizeOption[],
 ): {
   type: "object";
   properties: Record<string, Record<string, unknown>>;
@@ -139,8 +214,9 @@ export function buildModelConfigurationSchema(
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
   // Every Fast-capable model has one picker entry, so its Speed Mode toggle is
-  // always visible; legacy Fast defaults only choose the initial toggle value.
-  // Keep this in the tokens group because VS Code renders one control per group.
+  // available; legacy Fast defaults only choose the initial toggle value.
+  // VS Code renders one control per group; Context Window owns the tokens slot.
+  // Speed remains configurable through Manage Language Models.
   const exposesSpeedMode = spec.supportsFast;
   const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
   return {
@@ -180,6 +256,17 @@ export function buildModelConfigurationSchema(
             spec.fastDescription ?? "Faster generation with increased usage",
           ],
           default: defaultSpeedMode,
+          ...(contextOptions?.length ? {} : { group: "tokens" }),
+        },
+      } : {}),
+      ...(contextOptions?.length ? {
+        contextSize: {
+          type: ["string", "number"],
+          title: "Context Window",
+          enum: contextOptions.map((option) => option.value),
+          enumItemLabels: contextOptions.map((option) => option.label),
+          enumDescriptions: contextOptions.map((option) => option.description),
+          default: "auto",
           group: "tokens",
         },
       } : {}),
@@ -240,6 +327,14 @@ function stringOption(value: Readonly<Record<string, unknown>> | undefined, key:
 
 function booleanOption(value: Readonly<Record<string, unknown>> | undefined, key: string): boolean | undefined {
   return typeof value?.[key] === "boolean" ? value[key] as boolean : undefined;
+}
+
+function numberOption(value: Readonly<Record<string, unknown>> | undefined, key: string): number | undefined {
+  return typeof value?.[key] === "number" ? value[key] as number : undefined;
+}
+
+function parseConfiguredContextSize(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 function parseConfiguredEffort(value: string | undefined): ReasoningEffort | undefined {

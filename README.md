@@ -34,7 +34,7 @@ This native VS Code `LanguageModelChatProvider` handles OpenAI OAuth locally and
 3. Open **Chat: Manage Language Models**, select **Add Models → Codex Bridge**, name the entry, and enter the same profile ID.
 4. Repeat those steps with another profile ID to keep work and personal ChatGPT accounts available side by side.
 
-The authenticated Codex catalog remains authoritative. Composer controls override workspace defaults; reasoning defaults to High when supported, while hosted Web Search and Image Generation remain off until enabled. Click the Codex status-bar item to inspect five-hour and weekly quota, reset timing, and tokens observed by this extension.
+The authenticated Codex catalog remains authoritative. Composer controls override workspace defaults; reasoning defaults to Low when supported, while hosted Web Search and Image Generation remain off until enabled. Click the Codex status-bar item to inspect five-hour and weekly quota, reset timing, and tokens observed by this extension.
 
 ## Documentation
 

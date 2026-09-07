@@ -14,8 +14,7 @@ name, description, context window, image-input and tool-calling capabilities,
 and the reasoning levels (including defaults) offered by the Codex backend.
 Hidden directory entries and models without a usable reasoning level are
 omitted from the picker. Fast remains a capability on the normal entry and is
-selected through the model's native Speed Mode configuration instead of a
-second picker entry.
+selected through the model's configuration instead of a second picker entry.
 
 ## models.dev enrichment
 
@@ -72,4 +71,7 @@ to replace a saved zero selection.
 
 Context Window uses the dedicated tokens group so it remains visible beside
 reasoning controls. VS Code renders only one enum property per group.
-Speed Mode remains available by right-clicking the model in **Chat: Manage Language Models**.
+For Fast-capable models, the reasoning control therefore pairs each effort with
+a Fast choice, such as High and High Fast. Selecting a Fast choice sends the
+same priority service tier as the standalone Speed Mode control used by models
+without a Context Window selector.

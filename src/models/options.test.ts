@@ -168,7 +168,7 @@ test("carries the live Fast-tier description into the picker schema", () => {
   ]);
 });
 
-test("defaults ordered reasoning controls to high when the model supports it", () => {
+test("defaults ordered reasoning controls to low when the model supports it", () => {
   const optionSpec = modelOptionSpec({
     reasoningLevels: [
       { effort: "low", description: "Lighter reasoning" },
@@ -180,8 +180,8 @@ test("defaults ordered reasoning controls to high when the model supports it", (
     defaultReasoningSummary: "none",
   });
 
-  assert.equal(optionSpec.defaultEffort, "high");
-  assert.equal(buildModelConfigurationSchema(optionSpec).properties.reasoningEffort.default, "high");
+  assert.equal(optionSpec.defaultEffort, "low");
+  assert.equal(buildModelConfigurationSchema(optionSpec).properties.reasoningEffort.default, "low");
 });
 
 test("omits reasoning summaries when disabled or unsupported", () => {
@@ -242,6 +242,42 @@ test("exposes the Context Window control when tiers fit", () => {
 
   const plain = buildModelConfigurationSchema(spec);
   assert.equal("contextSize" in plain.properties, false);
+});
+
+test("combines reasoning effort and Fast mode when Context Window uses the token control", () => {
+  const highSpec: ModelOptionSpec = {
+    ...spec,
+    efforts: ["high"],
+    descriptions: { high: "Deeper reasoning" },
+    defaultEffort: "high",
+  };
+  const schema = buildModelConfigurationSchema(
+    highSpec,
+    { speedMode: "fast", reasoningEffort: "high", reasoningSummary: "auto", webSearch: false, imageGeneration: false, contextSize: 0 },
+    contextSizeOptions(244_800),
+  );
+
+  assert.deepEqual(schema.properties.mode.enum, ["normal:high", "fast:high"]);
+  assert.deepEqual(schema.properties.mode.enumItemLabels, ["High", "High Fast"]);
+  assert.equal(schema.properties.mode.default, "fast:high");
+  assert.equal(schema.properties.mode.group, "navigation");
+  assert.equal("reasoningEffort" in schema.properties, false);
+  assert.equal("speedMode" in schema.properties, false);
+
+  const options = resolveModelRequestOptions(
+    highSpec,
+    { mode: "fast:high", reasoningEffort: "medium", speedMode: "normal" },
+    {},
+    "normal",
+  );
+  assert.deepEqual(applyModelRequestOptions({}, options), {
+    reasoning: { effort: "high", summary: "auto" },
+    service_tier: "priority",
+  });
+  assert.equal(
+    resolveModelRequestOptions(highSpec, { mode: "normal:high" }, { speedMode: "fast" }, "normal").speedMode,
+    "normal",
+  );
 });
 
 // Mirrors VS Code's context indicator contract: numeric selections replace input,

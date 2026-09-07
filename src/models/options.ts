@@ -54,7 +54,7 @@ export function modelOptionSpec(
   return {
     efforts,
     descriptions: Object.fromEntries(model.reasoningLevels.map((level) => [level.effort, level.description])),
-    defaultEffort: efforts.includes("high") ? "high" : model.defaultReasoningEffort,
+    defaultEffort: efforts.includes("low") ? "low" : model.defaultReasoningEffort,
     supportsFast: model.supportsFast,
     fastDescription: model.fastDescription,
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
@@ -154,10 +154,10 @@ export function resolveModelRequestOptions(
   workspaceDefaults: Readonly<Record<string, unknown>>,
   speedMode: SpeedMode,
 ): ModelRequestOptions {
-  const legacyMode = parseLegacyMode(stringOption(requestConfiguration, "mode"));
-  // Prefer request-specific values, then legacy picker values, workspace fallbacks, and live model defaults.
-  const requestedEffort = parseConfiguredEffort(stringOption(requestConfiguration, "reasoningEffort"))
-    ?? legacyMode?.reasoningEffort
+  const selectedMode = parseLegacyMode(stringOption(requestConfiguration, "mode"));
+  // Prefer the combined picker value, then separate request settings, workspace fallbacks, and live model defaults.
+  const requestedEffort = selectedMode?.reasoningEffort
+    ?? parseConfiguredEffort(stringOption(requestConfiguration, "reasoningEffort"))
     ?? parseConfiguredEffort(stringOption(workspaceDefaults, "reasoningEffort"));
   const requestedSummary = parseConfiguredSummary(stringOption(requestConfiguration, "reasoningSummary"))
     ?? parseConfiguredSummary(stringOption(workspaceDefaults, "reasoningSummary"));
@@ -165,8 +165,8 @@ export function resolveModelRequestOptions(
     ?? booleanOption(workspaceDefaults, "webSearch");
   const requestedImageGeneration = booleanOption(requestConfiguration, "imageGeneration")
     ?? booleanOption(workspaceDefaults, "imageGeneration");
-  const requestedSpeed = parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
-    ?? legacyMode?.speedMode
+  const requestedSpeed = selectedMode?.speedMode
+    ?? parseConfiguredSpeed(stringOption(requestConfiguration, "speedMode"))
     ?? parseConfiguredSpeed(stringOption(workspaceDefaults, "speedMode"));
   const requestedContextSize = parseConfiguredContextSize(numberOption(requestConfiguration, "contextSize"));
   // A registered Fast variant is authoritative; settings cannot turn it back into a normal request.
@@ -213,24 +213,47 @@ export function buildModelConfigurationSchema(
     ? defaults.reasoningEffort
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
-  // Every Fast-capable model has one picker entry, so its Speed Mode toggle is
-  // available; legacy Fast defaults only choose the initial toggle value.
-  // VS Code renders one control per group; Context Window owns the tokens slot.
-  // Speed remains configurable through Manage Language Models.
-  const exposesSpeedMode = spec.supportsFast;
   const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
+  // VS Code renders one control per group. When Context Window occupies the
+  // tokens slot, fold Fast into the reasoning choices in the navigation slot.
+  const combinesSpeedMode = spec.supportsFast && Boolean(contextOptions?.length);
+  const exposesSpeedMode = spec.supportsFast && !combinesSpeedMode;
+  const modeOptions = spec.efforts.flatMap((effort) => {
+    const label = formatOptionLabel(effort);
+    const description = spec.descriptions[effort] ?? label;
+    return [
+      { value: `normal:${effort}`, label, description },
+      {
+        value: `fast:${effort}`,
+        label: `${label} Fast`,
+        description: `${description}. ${spec.fastDescription ?? "Faster generation with increased usage"}`,
+      },
+    ];
+  });
   return {
     type: "object",
     properties: {
-      reasoningEffort: {
-        type: "string",
-        title: "Reasoning Effort",
-        enum: [...spec.efforts],
-        enumItemLabels: spec.efforts.map(formatOptionLabel),
-        enumDescriptions: spec.efforts.map((effort) => spec.descriptions[effort] ?? formatOptionLabel(effort)),
-        default: defaultEffort,
-        group: "navigation",
-      },
+      ...(combinesSpeedMode ? {
+        mode: {
+          type: "string",
+          title: "Reasoning & Speed",
+          enum: modeOptions.map((option) => option.value),
+          enumItemLabels: modeOptions.map((option) => option.label),
+          enumDescriptions: modeOptions.map((option) => option.description),
+          default: `${defaultSpeedMode}:${defaultEffort}`,
+          group: "navigation",
+        },
+      } : {
+        reasoningEffort: {
+          type: "string",
+          title: "Reasoning Effort",
+          enum: [...spec.efforts],
+          enumItemLabels: spec.efforts.map(formatOptionLabel),
+          enumDescriptions: spec.efforts.map((effort) => spec.descriptions[effort] ?? formatOptionLabel(effort)),
+          default: defaultEffort,
+          group: "navigation",
+        },
+      }),
       webSearch: {
         type: "boolean",
         title: "Web Search",

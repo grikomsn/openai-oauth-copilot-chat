@@ -9,10 +9,11 @@ Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account
 The `default` profile preserves an existing single-account session, but after upgrading you must add a Codex Bridge entry in **Chat: Manage Language Models** and use `default` as its profile ID. **Codex Bridge: Select Active Profile** chooses which account the status bar and management commands display; model requests always use the account attached to the selected Language Models entry.
 
 Each model exposes the reasoning efforts advertised by the live Codex catalog. Ordered
-effort controls default to High when the model supports it; otherwise the catalog default
-is retained. Models
-that advertise the `fast` additional speed tier expose a native **Speed Mode** control
-with Normal and Fast choices. Selecting Fast requests faster processing with increased
+effort controls default to Low when the model supports it; otherwise the catalog default
+is retained. Models that advertise the `fast` additional speed tier expose Fast choices
+in their model configuration. When Context Window is available, each effort is paired
+with a Fast choice such as High and High Fast; otherwise a separate **Speed Mode** control
+provides Normal and Fast choices. Selecting Fast requests faster processing with increased
 account usage without adding a separate Fast model entry. The selected **profile for usage and management** is restored after restart; it never changes the account attached to a model entry.
 
 The `openaiCodex.reasoningSummary` setting controls the Responses API

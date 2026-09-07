@@ -97,7 +97,7 @@
             "max",
             "ultra"
           ],
-          "default": "high",
+          "default": "low",
           "deprecationMessage": "Legacy workspace fallback retained for compatibility; prefer the live model picker.",
           "description": "Legacy default reasoning effort sent to Codex when no model-specific value is selected. Unsupported values fall back to the live model default."
         },

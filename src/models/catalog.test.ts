@@ -184,6 +184,21 @@ test("maps default and advertised Codex context limits", () => {
   ]);
 });
 
+test("reserves a minimum output budget when auto-compact fills the effective window", () => {
+  const [model] = parseCodexModelsPayload({ models: [remoteModel({
+    slug: "full-window",
+    priority: 1,
+    context_window: 400_000,
+    effective_context_window_percent: 68,
+    auto_compact_token_limit: 272_000,
+  })] });
+
+  assert.equal(model.input, 263_808);
+  assert.equal(model.output, 8_192);
+  assert.ok(model.input + model.output <= 272_000);
+  assert.ok(model.output >= 8_192);
+});
+
 test("rejects malformed catalog responses", () => {
   assert.throws(() => parseCodexModelsPayload({}), /models array/);
   assert.throws(

@@ -77,6 +77,8 @@ interface RemoteCodexModel {
 
 const DEFAULT_EFFECTIVE_CONTEXT_RATIO = 0.95;
 const DEFAULT_AUTO_COMPACT_RATIO = 0.9;
+/** Minimum output budget reserved so the advertised window never collapses to zero output. */
+const MIN_OUTPUT_RESERVE = 8_192;
 
 /**
  * Converts the backend model-directory response into selectable model metadata.
@@ -209,6 +211,8 @@ function codexTokenLimits(model: RemoteCodexModel): { input: number; output: num
     defaultAutoCompactLimit,
   );
   // Keep input below the compaction threshold and reserve the remaining effective window for output.
-  const input = Math.min(autoCompactLimit, effectiveContextWindow);
-  return { input, output: effectiveContextWindow - input };
+  // When the auto-compact limit fills the effective window, reserve a minimum output budget so
+  // the advertised window never collapses to zero output.
+  const input = Math.min(autoCompactLimit, Math.max(1, effectiveContextWindow - MIN_OUTPUT_RESERVE));
+  return { input, output: Math.max(1, effectiveContextWindow - input) };
 }

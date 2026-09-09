@@ -4,6 +4,9 @@ out/
 .DS_Store
 *.log
 coverage/
+.vscode-test/
 .env
 .env.*
 !.env.example
+tmp/
+assets/Codex*

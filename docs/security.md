@@ -1,6 +1,6 @@
 # Security
 
-## Credential handling
+## Credential storage
 
 - OAuth access and refresh tokens are stored with VS Code Secret Storage.
 - Tokens and prompts are never written to the output channel.
@@ -16,6 +16,14 @@
 - `https://models.dev/api.json` for public model metadata enrichment only
 
 Requests use the independent originator `openai-oauth-copilot-chat` and a matching user agent. They do not identify as the official Codex CLI or OpenAI VS Code extension.
+
+## Inline completions
+
+When `openaiOAuth.inlineSuggestions` is enabled, each suggestion sends a bounded window of the current document (a fixed number of lines before the cursor and a bounded suffix after it) to ChatGPT's Codex responses endpoint. Upstream error bodies are never surfaced or logged because they can echo prompt context, and suggestion text flows only into the editor's ghost text. The feature is disabled by default.
+
+## Logging
+
+The output channel records only status and metadata. It does not record OAuth tokens, prompts, response text, or account data.
 
 ## Reporting vulnerabilities
 

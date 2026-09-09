@@ -4,6 +4,9 @@
 .codex/**
 docs/**
 assets/cover.jpg
+assets/Codex*/**
+assets/*.zip
+tmp/**
 .env*
 .gitignore
 CODE_OF_CONDUCT.md

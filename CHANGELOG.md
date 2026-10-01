@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.3
+
+### Patch Changes
+
+- 096f41d: Add GPT-6.1 Sol fallback pricing and refresh the Codex model-directory client version.
+
 ## 0.11.2
 
 ### Patch Changes

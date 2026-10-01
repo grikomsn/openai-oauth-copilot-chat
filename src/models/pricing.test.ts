@@ -23,6 +23,7 @@ test("converts USD per-million rates to VS Code pricing fields", () => {
 test("uses official standard rates when models.dev metadata is unavailable", () => {
   assert.deepEqual(openAIModelCost("gpt-5.6-terra"), { input: 2, cacheRead: 0.2, output: 12 });
   assert.deepEqual(openAIModelCost("gpt-6-astra"), { input: 10, cacheRead: 1, output: 50 });
+  assert.deepEqual(openAIModelCost("gpt-6.1-sol"), { input: 2, cacheRead: 0.1, output: 10 });
   assert.deepEqual(openAIModelCost("gpt-6-sol"), { input: 2, cacheRead: 0.2, output: 10 });
   assert.deepEqual(openAIModelCost("gpt-6-luna"), { input: 0.1, cacheRead: 0.01, output: 0.5 });
   assert.deepEqual(openAIModelCost("gpt-5.6-sol"), { input: 4, cacheRead: 0.4, output: 20 });

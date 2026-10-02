@@ -39,7 +39,8 @@ no discovered cost is available. Costs are rendered as
 price when known, plus a low/medium/high/very-high price category.
 
 The checked-in fallback covers the current flagship and coding-tuned models,
-including `gpt-6-astra` ($10 / $50), `gpt-6-sol` ($2 / $10), `gpt-6-luna`
+including `gpt-6-astra` ($10 / $50), `gpt-6.1-sol` ($2 / $10, cached input
+$0.10), `gpt-6-sol` ($2 / $10, cached input $0.20), `gpt-6-luna`
 ($0.10 / $0.50), `gpt-5.6-sol`/`gpt-5.6` ($4 / $20),
 `gpt-5.6-terra` ($2 / $12), `gpt-5.6-luna` ($0.20 / $1.20), and the
 `gpt-5.3-codex` family ($1.75 / $14). Rates are the official OpenAI standard

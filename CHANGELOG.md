@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.4
+
+### Patch Changes
+
+- 99ccd30: Request the Codex model directory with client version 0.160.0, matching the latest Codex release, and document the gpt-6.1-sol fallback rate.
+
 ## 0.11.3
 
 ### Patch Changes

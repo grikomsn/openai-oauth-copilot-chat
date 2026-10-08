@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { messageOf } from "./errors";
-import { DEFAULT_OAUTH_PROFILE, OpenAIOAuth } from "./auth/auth";
+import { OpenAIOAuth } from "./auth/auth";
 import { registerCodexCommands } from "./commands/commands";
 import { OpenAICodexProvider } from "./provider";
 import { EXTENSION_DISPLAY_NAME, extensionUserAgent } from "./transport/protocol";
@@ -8,7 +8,6 @@ import { formatUsageStatusBar, formatUsageTooltip } from "./usage/presentation";
 import { usageSnapshotForPersistence, type CodexUsageSnapshot } from "./usage/domain";
 import { activeProfileFromState } from "./provider-profile";
 
-const LEGACY_USAGE_STATE_KEY = "openaiCodex.usageSnapshot.v1";
 const USAGE_STATE_KEY = "openaiCodex.usageSnapshots.v2";
 const ACTIVE_PROFILE_STATE_KEY = "openaiCodex.activeProfile.v1";
 
@@ -17,7 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const oauth = new OpenAIOAuth(context.secrets);
   const version = context.extension.packageJSON.version as string;
   const storedUsage = context.globalState.get<Readonly<Record<string, CodexUsageSnapshot>>>(USAGE_STATE_KEY)
-    ?? { [DEFAULT_OAUTH_PROFILE]: context.globalState.get<CodexUsageSnapshot>(LEGACY_USAGE_STATE_KEY) ?? {} };
+    ?? {};
   const activeProfile = activeProfileFromState(context.globalState.get<unknown>(ACTIVE_PROFILE_STATE_KEY));
   const provider = new OpenAICodexProvider(
     oauth,
@@ -36,6 +35,10 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     usageStatus,
+    context.secrets.onDidChange(() => {
+      provider.clearModelCache();
+      provider.fireDidChange();
+    }),
     provider.onDidChangeActiveProfile((profile) => {
       void context.globalState.update(ACTIVE_PROFILE_STATE_KEY, profile);
     }),

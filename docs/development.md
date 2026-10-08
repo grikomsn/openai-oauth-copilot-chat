@@ -63,3 +63,7 @@ npm run changeset
 Changesets maintains a version pull request on `main`. Merging that pull request publishes the VSIX to the Visual Studio Marketplace and attaches the same artifact to a GitHub release. The release workflow skips an existing version tag, preventing duplicate publication.
 
 The packaged extension contains compiled runtime files, Marketplace metadata, the changelog, license, README, and icon. Source, tests, maps, repository automation, project documentation, and local build artifacts are excluded by `.vscodeignore`.
+
+## Native contract checks
+
+After `npm run compile`, launch VS Code with this repository as the extension development path and `test/native/index.js` as the extension tests path. These checks use real VS Code response constructors with injected synthetic credentials and HTTP responses. They cover parallel calls, credential routing, and failure paths without accessing live accounts. Live chat and account checks remain separate.

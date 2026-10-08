@@ -94,3 +94,95 @@ test("does not repeat completed response text after streaming deltas", () => {
   ].join("\n\n") + "\n\n");
   assert.deepEqual(events, [{ text: "answer" }]);
 });
+
+test("joins CRLF split at every transport character boundary", () => {
+  const parser = new ResponsesStreamParser();
+  const wire = 'data: {"type":"response.output_text.delta","delta":"hello"}\r\n\r\ndata: {"type":"response.completed"}\r\n\r\n';
+  const events = [...wire].flatMap((character) => parser.push(character));
+  assert.deepEqual(events, [{ text: "hello" }]);
+  parser.validateCompletion();
+});
+
+test("keeps parallel argument fragments and changing aliases attached to their own calls", () => {
+  const parser = new ResponsesStreamParser();
+  const events = parser.push([
+    { type: "response.function_call_arguments.delta", output_index: 0, delta: '{"path":' },
+    { type: "response.function_call_arguments.delta", output_index: 1, delta: '{"path":' },
+    { type: "response.output_item.added", output_index: 0, item: { type: "function_call", id: "item-a", call_id: "call-a", name: "read" } },
+    { type: "response.output_item.added", output_index: 1, item: { type: "function_call", id: "item-b", call_id: "call-b", name: "read" } },
+    { type: "response.function_call_arguments.delta", item_id: "item-b", delta: '"b"}' },
+    { type: "response.function_call_arguments.delta", call_id: "call-a", delta: '"a"}' },
+    { type: "response.output_item.done", output_index: 1, item: { type: "function_call", id: "item-b", call_id: "call-b", name: "read" } },
+    { type: "response.output_item.done", output_index: 0, item: { type: "function_call", id: "item-a", call_id: "call-a", name: "read" } },
+    { type: "response.function_call_arguments.done", item_id: "item-a", arguments: '{"path":"a"}' },
+    { type: "response.output_item.done", item: { type: "function_call", call_id: "call-a", name: "read" } },
+    { type: "response.completed", response: { output: [
+      { type: "function_call", id: "item-a", call_id: "call-a", name: "read" },
+      { type: "function_call", id: "item-b", call_id: "call-b", name: "read" },
+    ] } },
+  ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""));
+  assert.deepEqual(events, [
+    { toolCall: { id: "call-b", name: "read", arguments: '{"path":"b"}' } },
+    { toolCall: { id: "call-a", name: "read", arguments: '{"path":"a"}' } },
+  ]);
+});
+
+test("recovers completed tools and encrypted reasoning once and rejects incomplete EOF", () => {
+  const parser = new ResponsesStreamParser();
+  assert.throws(() => parser.validateCompletion(), /ended before/);
+  const output = [
+    { type: "function_call", call_id: "c1", name: "read", arguments: "{}" },
+    { type: "reasoning", id: "r1", encrypted_content: "opaque" },
+  ];
+  const events = parser.push(`data: ${JSON.stringify({ type: "response.completed", response: { output } })}\n\n`);
+  assert.equal(events.length, 2);
+  parser.validateCompletion();
+  assert.deepEqual(parser.push(`data: ${JSON.stringify({ type: "response.completed", response: { output } })}\n\n`), []);
+  assert.deepEqual(new ResponsesStreamParser().push('data: {"type":"response.incomplete"}\n\n'), [{ error: "Codex response is incomplete" }]);
+});
+
+test("allocates distinct missing call IDs within and across requests", () => {
+  const wire = 'data: {"type":"response.output_item.done","item":{"type":"function_call","name":"read","arguments":"{}"}}\n\n';
+  const ids = [new ResponsesStreamParser().push(wire + wire), new ResponsesStreamParser().push(wire)]
+    .flat().map((event) => event.toolCall!.id);
+  assert.equal(new Set(ids).size, 3);
+});
+
+
+test("merges separately observed index and item aliases in fragment order", () => {
+  const parser = new ResponsesStreamParser();
+  const events = parser.push([
+    { type: "response.function_call_arguments.delta", output_index: 0, delta: '{"value":' },
+    { type: "response.function_call_arguments.delta", item_id: "item", delta: '"complete"}' },
+    { type: "response.output_item.done", output_index: 0, item: { type: "function_call", id: "item", call_id: "call", name: "probe" } },
+  ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""));
+  assert.deepEqual(events, [{ toolCall: { id: "call", name: "probe", arguments: '{"value":"complete"}' } }]);
+});
+
+test("does not emit invalid partial arguments when item completion precedes the final arguments", () => {
+  const parser = new ResponsesStreamParser();
+  const wire = (event: object): string => `data: ${JSON.stringify(event)}\n\n`;
+  assert.deepEqual(parser.push(wire({ type: "response.function_call_arguments.delta", output_index: 0, delta: '{"value":' })
+    + wire({ type: "response.output_item.done", output_index: 0, item: { type: "function_call", call_id: "call", name: "probe" } })), []);
+  assert.deepEqual(parser.push(wire({ type: "response.function_call_arguments.done", output_index: 0, arguments: '{"value":1}' })), [
+    { toolCall: { id: "call", name: "probe", arguments: '{"value":1}' } },
+  ]);
+  parser.push(wire({ type: "response.completed" }));
+  parser.validateCompletion();
+});
+
+test("rejects unfinished tool calls even when a completed terminal event arrives", () => {
+  const parser = new ResponsesStreamParser();
+  parser.push('data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{"}\n\n');
+  parser.push('data: {"type":"response.completed"}\n\n');
+  assert.throws(() => parser.validateCompletion(), /unfinished function call/);
+});
+
+test("waits for missing arguments rather than fabricating an empty object", () => {
+  const parser = new ResponsesStreamParser();
+  assert.deepEqual(parser.push('data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"call","name":"probe"}}\n\n'), []);
+  assert.deepEqual(parser.push('data: {"type":"response.completed","response":{"output":[{"type":"function_call","call_id":"call","name":"probe","arguments":"{}"}]}}\n\n'), [
+    { toolCall: { id: "call", name: "probe", arguments: "{}" } },
+  ]);
+  parser.validateCompletion();
+});

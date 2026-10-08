@@ -36,6 +36,7 @@ async function manage(
   const profile = provider.getActiveProfile();
   const session = await oauth.sessionInfo(profile);
   const picked = await vscode.window.showQuickPick(session ? [
+    { label: "$(list-tree) Reconcile accounts and observed entries", action: "reconcile" },
     { label: "$(account) Select profile for usage and management", action: "switch" },
     { label: "$(add) Add ChatGPT account", action: "add" },
     { label: "$(pulse) Show Codex usage", action: "usage" },
@@ -45,6 +46,7 @@ async function manage(
     { label: "$(sign-out) Sign out of Codex Bridge", action: "signout" },
   ] : [
     { label: "$(globe) Sign in with ChatGPT", action: "signin", description: `Profile: ${profile}` },
+    { label: "$(list-tree) Reconcile accounts and observed entries", action: "reconcile" },
     { label: "$(account) Select profile for usage and management", action: "switch" },
     { label: "$(add) Add ChatGPT account", action: "add" },
     { label: "$(link) Sign in manually", action: "manual", description: "Use if localhost:1455 is unavailable" },
@@ -52,7 +54,15 @@ async function manage(
     { label: "$(output) Show Codex Bridge logs", action: "logs" },
   ], { title: `Codex Bridge [${profile}] — ${session?.email ?? (session ? "signed in" : "not signed in")}` });
   if (!picked) return;
-  if (picked.action === "signin") await browserSignIn(oauth, provider, output, profile);
+  if (picked.action === "reconcile") {
+    const result = await provider.reconcileAccounts();
+    const rows = [
+      ...result.entriesWithoutSessions.map((profile) => ({ label: profile, description: "Observed entry has no stored session" })),
+      ...result.accountsWithoutObservedEntries.map((profile) => ({ label: profile, description: "Signed in; no entry observed yet" })),
+    ];
+    await vscode.window.showQuickPick(rows.length ? rows : [{ label: "Stored accounts match the entries last observed", description: "" }], { title: "Account reconciliation — discovery history may include removed entries" });
+    await vscode.commands.executeCommand("workbench.action.chat.manage");
+  } else if (picked.action === "signin") await browserSignIn(oauth, provider, output, profile);
   else if (picked.action === "switch") await selectProfile(oauth, provider);
   else if (picked.action === "add") await addAccount(oauth, provider, output);
   else if (picked.action === "manual") await manualSignIn(oauth, provider, output, profile);

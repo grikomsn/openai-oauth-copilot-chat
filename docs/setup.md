@@ -4,9 +4,9 @@
 
 Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload VS Code.
 
-Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account a profile ID. After sign-in, run **Chat: Manage Language Models**, choose **Add Models → Codex Bridge**, and enter the same profile ID. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window. Leaving the profile field empty preserves the legacy `default` account.
+Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account a profile ID. After sign-in, run **Chat: Manage Language Models**, choose **Add Models → Codex Bridge**, and enter the same profile ID. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window. Leaving the profile field empty selects the `default` profile.
 
-The `default` profile preserves an existing single-account session, but after upgrading you must add a Codex Bridge entry in **Chat: Manage Language Models** and use `default` as its profile ID. **Codex Bridge: Select Active Profile** chooses which account the status bar and management commands display; model requests always use the account attached to the selected Language Models entry.
+Sessions use the current profile store; older single-account session formats are not loaded. Model IDs include every profile, including `default`, so reselect the chat model after upgrading. **Codex Bridge: Select Profile for Usage and Management** chooses which account the status bar and management commands display; model requests always use the account attached to the selected Language Models entry.
 
 Each model exposes the reasoning efforts advertised by the live Codex catalog. Ordered
 effort controls default to Low when the model supports it; otherwise the catalog default
@@ -64,3 +64,7 @@ OpenAI's Codex OAuth client redirects to `http://localhost:1455/auth/callback`. 
 ## Requests fail
 
 Run **Codex Bridge: Test Connection**, then inspect **Output → Codex Bridge**. A `401` triggers one automatic token refresh. A `403` generally means the signed-in account cannot access the selected model. A `429` indicates account capacity or rate limits.
+
+Account management lists valid sessions directly from VS Code Secret Storage. **Manage Connection → Reconcile accounts and observed entries** compares them with discovery history. That history contains profile aliases, model counts, and timestamps only; it may include entries removed in VS Code and does not enumerate current native entries. Account changes refresh every provider entry.
+
+Streaming retains cancellation and the request deadline until the body finishes. Interrupted streams and `response.incomplete` fail visibly rather than reporting success. Reasoning segments close before text or tool calls, and parallel function arguments stay attached to their item, call, or output index.

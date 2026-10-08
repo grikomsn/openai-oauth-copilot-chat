@@ -38,6 +38,7 @@ import { codexModelsClientVersion } from "./transport/protocol";
 import { CatalogCache } from "./models/catalog-cache";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
 import { modelPricingFields, openAIModelCost } from "./models/pricing";
+import { observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
 import { activeProfileFromState, profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
 
 /** Live model information registered with VS Code Chat. */
@@ -81,7 +82,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     private readonly output: vscode.OutputChannel,
     userAgent: string,
     initialUsage: Readonly<Record<string, CodexUsageSnapshot>> = {},
-    metadataCache: MetadataCache = memoryMetadataCache(),
+    private readonly metadataCache: MetadataCache = memoryMetadataCache(),
     fetcher: typeof fetch = fetch,
     initialActiveProfile: unknown = DEFAULT_OAUTH_PROFILE,
   ) {
@@ -95,6 +96,10 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       fetcher,
     );
     this.metadata = new ModelsDevMetadata(metadataCache, fetcher);
+  }
+
+  async reconcileAccounts(): Promise<ReturnType<typeof reconcileProfiles>> {
+    return reconcileProfiles(readProfileJournal(this.metadataCache), await this.oauth.listProfiles());
   }
 
   fireDidChange(): void {
@@ -213,8 +218,12 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       if (!options.silent) void vscode.window.showErrorMessage(message);
       return [];
     }
-    if (!await this.oauth.hasSession(profile)) return [];
+    if (!await this.oauth.hasSession(profile)) {
+      await observeProfile(this.metadataCache, profile, 0);
+      return [];
+    }
     const models = expandCodexModelVariants(await this.fetchModels(token, profile));
+    await observeProfile(this.metadataCache, profile, models.length);
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
       const defaults = resolveRequestOptions(optionSpec, model.speedMode, undefined);
@@ -267,7 +276,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     if (configuration().get("debugLogging", false)) {
       this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} imageGeneration=${requestOptions.imageGeneration}${contextCap !== undefined ? ` contextCap=${contextCap}` : ""} initiator=${options.requestInitiator ?? "unknown"}`);
     }
-    await consumeStream(response.body, progress, token, (usage) => this.captureRequestUsage(usage, model.rawModelId, model.profile));
+    await consumeStream(response.body, progress, token, vscode, (usage) => this.captureRequestUsage(usage, model.rawModelId, model.profile));
     if (Date.now() - (this.lastQuotaFetchAt.get(model.profile) ?? 0) > 60_000) {
       void this.refreshUsage(model.profile).catch((error) => this.output.appendLine(`[usage] refresh failed: ${messageOf(error)}`));
     }
@@ -301,7 +310,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       const text: string[] = [];
       await consumeStream(response.body, { report: (part) => {
         if (part instanceof vscode.LanguageModelTextPart) text.push(part.value);
-      } }, cancellation.token, (usage) => this.captureRequestUsage(usage, model.id, profile));
+      } }, cancellation.token, vscode, (usage) => this.captureRequestUsage(usage, model.id, profile));
       return { model: model.id, text: text.join("").trim() || "(empty response)", ...requestOptions };
     } finally {
       cancellation.dispose();

@@ -45,6 +45,7 @@ test("rejects OAuth callbacks with missing or mismatched state before token exch
 test("stores and resolves OAuth sessions independently by profile", async () => {
   const values = new Map<string, string>();
   const secrets = {
+    keys: async () => [...values.keys()],
     get: async (key: string) => values.get(key),
     store: async (key: string, value: string) => { values.set(key, value); },
     delete: async (key: string) => { values.delete(key); },
@@ -75,9 +76,10 @@ test("normalizes safe profile IDs and rejects ambiguous values", () => {
   assert.throws(() => normalizeProfileId("work profile"), /Profile IDs/);
 });
 
-test("serializes concurrent profile-index updates", async () => {
+test("discovers concurrent sign-ins directly from stored sessions", async () => {
   const values = new Map<string, string>();
   const secrets = {
+    keys: async () => [...values.keys()],
     get: async (key: string) => values.get(key),
     store: async (key: string, value: string) => {
       if (key.includes("oauthProfiles")) await new Promise((resolve) => setTimeout(resolve, 5));
@@ -103,6 +105,7 @@ test("does not persist a refresh that finishes after sign-out", async () => {
     accessToken: "old-access", refreshToken: "old-refresh", expiresAt: 0,
   })]]);
   const secrets = {
+    keys: async () => [...values.keys()],
     get: async (key: string) => values.get(key),
     store: async (key: string, value: string) => { values.set(key, value); },
     delete: async (key: string) => { values.delete(key); },
@@ -124,6 +127,7 @@ test("does not persist a refresh that finishes after sign-out", async () => {
 test("does not persist an authorization exchange that finishes after sign-out", async () => {
   const values = new Map<string, string>();
   const secrets = {
+    keys: async () => [...values.keys()],
     get: async (key: string) => values.get(key),
     store: async (key: string, value: string) => { values.set(key, value); },
     delete: async (key: string) => { values.delete(key); },
@@ -145,6 +149,7 @@ test("does not persist an authorization exchange that finishes after sign-out", 
 test("does not start a late manual callback after sign-out", async () => {
   const values = new Map<string, string>();
   const secrets = {
+    keys: async () => [...values.keys()],
     get: async (key: string) => values.get(key),
     store: async (key: string, value: string) => { values.set(key, value); },
     delete: async (key: string) => { values.delete(key); },
@@ -172,6 +177,7 @@ test("removes an authorization write superseded during SecretStorage persistence
   const started = new Promise<void>((resolve) => { persistenceStarted = resolve; });
   const wait = new Promise<void>((resolve) => { releasePersistence = resolve; });
   const secrets = {
+    keys: async () => [...values.keys()],
     get: async (key: string) => values.get(key),
     store: async (key: string, value: string) => {
       values.set(key, value);
@@ -194,4 +200,21 @@ test("removes an authorization write superseded during SecretStorage persistence
   await assert.rejects(completing, /was superseded/);
   assert.equal(await oauth.hasSession("work"), false);
   assert.deepEqual(await oauth.listProfiles(), []);
+});
+
+test("enumerates only valid current stored sessions, independent of stale indexes", async () => {
+  const session = JSON.stringify({ accessToken: "synthetic", refreshToken: "synthetic", expiresAt: 1000 });
+  const values = new Map([
+    ["openaiCodex.oauthSession.v2.orphan", session],
+    ["openaiCodex.oauthSession.v2.default", session],
+    ["openaiCodex.oauthProfiles.v2", '["ghost"]'],
+    ["openaiCodex.oauthSession.v2.invalid", "null"],
+    ["openaiCodex.oauthSession.v2.empty", '{"accessToken":"","refreshToken":"x","expiresAt":1}'],
+    ["openaiCodex.oauthSession.v2.Bad ID", session],
+    ["openaiCodex.oauthSession.v1", session],
+  ]);
+  const oauth = new OpenAIOAuth({ keys: async () => [...values.keys()], get: async (key: string) => values.get(key) } as unknown as vscode.SecretStorage);
+  assert.deepEqual(await oauth.listProfiles(), ["default", "orphan"]);
+  values.delete("openaiCodex.oauthSession.v2.default");
+  assert.equal(await oauth.hasSession(), false);
 });

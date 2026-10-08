@@ -1,0 +1,41 @@
+name: Model resync
+
+on:
+  schedule:
+    # Mondays 03:50 UTC
+    - cron: "50 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  resync:
+    name: Resync model metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Compile bundled metadata
+        run: npm run compile
+      - name: Compare bundled pricing with models.dev
+        run: node scripts/refresh-models.mjs --ci --report-file model-resync-report.md
+      - name: Create resync pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: resync/model-metadata
+          delete-branch: true
+          title: Resync model metadata from live sources
+          commit-message: Resync model metadata
+          body-path: model-resync-report.md
+          labels: |
+            automation
+            model-metadata

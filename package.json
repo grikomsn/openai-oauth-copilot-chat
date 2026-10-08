@@ -187,6 +187,7 @@
     "update-codex-version": "node scripts/update-codex-version.mjs",
     "version": "changeset version",
     "release": "npm run check && vsce publish --skip-duplicate",
+    "refresh-models": "node scripts/refresh-models.mjs",
     "prepackage": "npm run check",
     "package": "vsce package",
     "vscode:prepublish": "npm run compile"

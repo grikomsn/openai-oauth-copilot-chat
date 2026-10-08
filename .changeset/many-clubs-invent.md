@@ -1,5 +1,5 @@
 ---
-"openai-oauth-copilot-chat": minor
+"openai-oauth-copilot-chat": major
 ---
 
 Fix parallel Responses tool identity, reasoning boundaries, fragmented SSE, and incomplete-stream errors. Retain cancellation and deadlines through body consumption. Discover valid OAuth sessions directly from SecretStorage and reconcile them with minimal observation history.

@@ -19,8 +19,6 @@ import {
 const CALLBACK_PORT = 1455;
 const CALLBACK_PATH = "/auth/callback";
 const SCOPE = "openid email profile offline_access";
-const LEGACY_SECRET_KEY = "openaiCodex.oauthSession.v1";
-const PROFILE_INDEX_KEY = "openaiCodex.oauthProfiles.v2";
 const PROFILE_SECRET_PREFIX = "openaiCodex.oauthSession.v2.";
 export const DEFAULT_OAUTH_PROFILE = "default";
 
@@ -64,7 +62,6 @@ type Fetcher = typeof fetch;
 export class OpenAIOAuth {
   private readonly refreshPromises = new Map<string, { identity: string; promise: Promise<OAuthSession> }>();
   private readonly sessionMutations = new Map<string, Promise<void>>();
-  private profileIndexMutation: Promise<void> = Promise.resolve();
   private readonly profileGenerations = new Map<string, number>();
 
   constructor(
@@ -83,9 +80,14 @@ export class OpenAIOAuth {
   }
 
   async listProfiles(): Promise<readonly string[]> {
-    const profiles = await this.readProfileIndex();
-    if (await this.secrets.get(LEGACY_SECRET_KEY)) profiles.add(DEFAULT_OAUTH_PROFILE);
-    return [...profiles].sort();
+    const profiles: string[] = [];
+    for (const key of await this.secrets.keys()) {
+      if (!key.startsWith(PROFILE_SECRET_PREFIX)) continue;
+      const profile = key.slice(PROFILE_SECRET_PREFIX.length);
+      if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(profile)) continue;
+      if (await this.loadSession(profile)) profiles.push(profile);
+    }
+    return profiles.sort();
   }
 
   async signOut(profile = DEFAULT_OAUTH_PROFILE): Promise<void> {
@@ -93,8 +95,6 @@ export class OpenAIOAuth {
     this.invalidateProfile(normalized);
     await this.mutateSession(normalized, async () => {
       await this.secrets.delete(profileSecretKey(normalized));
-      if (normalized === DEFAULT_OAUTH_PROFILE) await this.secrets.delete(LEGACY_SECRET_KEY);
-      await this.mutateProfileIndex((profiles) => profiles.delete(normalized));
     });
   }
 
@@ -302,7 +302,6 @@ export class OpenAIOAuth {
         const current = await this.loadSession(normalized);
         if (current && sessionIdentity(current) === sessionIdentity(session)) {
           await this.secrets.delete(profileSecretKey(normalized));
-          await this.mutateProfileIndex((profiles) => profiles.delete(normalized));
         }
         throw new Error(`OpenAI Codex sign-in for profile “${normalized}” was superseded`);
       }
@@ -312,36 +311,20 @@ export class OpenAIOAuth {
   private async storeSession(profile: string, session: OAuthSession): Promise<void> {
     const normalized = normalizeProfileId(profile);
     await this.secrets.store(profileSecretKey(normalized), JSON.stringify(session));
-    await this.mutateProfileIndex((profiles) => { profiles.add(normalized); });
   }
 
   private async loadSession(profile: string): Promise<OAuthSession | undefined> {
     const normalized = normalizeProfileId(profile);
-    const raw = await this.secrets.get(profileSecretKey(normalized))
-      ?? (normalized === DEFAULT_OAUTH_PROFILE ? await this.secrets.get(LEGACY_SECRET_KEY) : undefined);
+    const raw = await this.secrets.get(profileSecretKey(normalized));
     if (!raw) return undefined;
     try {
       const value = JSON.parse(raw) as OAuthSession;
-      return typeof value.accessToken === "string" && typeof value.refreshToken === "string" && typeof value.expiresAt === "number"
+      return value && typeof value.accessToken === "string" && value.accessToken.length > 0
+        && typeof value.refreshToken === "string" && value.refreshToken.length > 0 && Number.isFinite(value.expiresAt)
         ? value : undefined;
     } catch {
       return undefined;
     }
-  }
-
-  private async readProfileIndex(): Promise<Set<string>> {
-    const raw = await this.secrets.get(PROFILE_INDEX_KEY);
-    if (!raw) return new Set<string>();
-    try {
-      const value = JSON.parse(raw) as unknown;
-      return new Set(Array.isArray(value) ? value.flatMap((item) => typeof item === "string" ? [normalizeProfileId(item)] : []) : []);
-    } catch {
-      return new Set<string>();
-    }
-  }
-
-  private async writeProfileIndex(profiles: ReadonlySet<string>): Promise<void> {
-    await this.secrets.store(PROFILE_INDEX_KEY, JSON.stringify([...profiles].sort()));
   }
 
   private async mutateSession(profile: string, operation: () => Promise<void>): Promise<void> {
@@ -353,16 +336,6 @@ export class OpenAIOAuth {
     } finally {
       if (this.sessionMutations.get(profile) === current) this.sessionMutations.delete(profile);
     }
-  }
-
-  private async mutateProfileIndex(operation: (profiles: Set<string>) => void): Promise<void> {
-    const current = this.profileIndexMutation.catch(() => undefined).then(async () => {
-      const profiles = await this.readProfileIndex();
-      operation(profiles);
-      await this.writeProfileIndex(profiles);
-    });
-    this.profileIndexMutation = current;
-    await current;
   }
 
   private profileGeneration(profile: string): number {

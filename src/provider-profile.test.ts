@@ -5,7 +5,7 @@ import { activeProfileFromState, profileFromConfiguration, profileQualifiedModel
 test("normalizes native provider-entry profiles and falls back to the default profile", () => {
   assert.equal(profileFromConfiguration({ profile: "  Work-Team  " }), "work-team");
   assert.equal(profileFromConfiguration({ profile: "" }), "default");
-  assert.equal(profileFromConfiguration({ profile: 7 }), "default");
+  assert.throws(() => profileFromConfiguration({ profile: 7 }), /Profile must be a string/);
   assert.equal(profileFromConfiguration({}), "default");
   assert.equal(profileFromConfiguration(undefined), "default");
 });
@@ -19,8 +19,8 @@ test("wraps invalid provider-entry profiles with a Manage Language Models hint",
   assert.throws(() => profileFromConfiguration({ profile: "-".repeat(65) }));
 });
 
-test("qualifies model IDs per profile while keeping the default profile unqualified", () => {
-  assert.equal(profileQualifiedModelId("default", "gpt-5.3-codex"), "gpt-5.3-codex");
+test("qualifies model IDs per profile including the default profile", () => {
+  assert.equal(profileQualifiedModelId("default", "gpt-5.3-codex"), "default::gpt-5.3-codex");
   assert.equal(profileQualifiedModelId("work", "gpt-5.3-codex"), "work::gpt-5.3-codex");
   assert.equal(profileQualifiedModelId("  Personal  ", "gpt-5.3-codex"), "personal::gpt-5.3-codex");
 });

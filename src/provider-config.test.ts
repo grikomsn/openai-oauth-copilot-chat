@@ -35,7 +35,7 @@ test("declares an optional Codex client-version override", () => {
 
 test("qualifies model IDs by profile and reports invalid native profile values", () => {
   assert.equal(profileQualifiedModelId("Work", "gpt-5.2"), "work::gpt-5.2");
-  assert.equal(profileQualifiedModelId("default", "gpt-5.2"), "gpt-5.2");
+  assert.equal(profileQualifiedModelId("default", "gpt-5.2"), "default::gpt-5.2");
   assert.throws(
     () => profileFromConfiguration({ profile: "work profile" }),
     /Update this provider entry in Manage Language Models/,

@@ -89,7 +89,10 @@ export class CodexTransport {
     request: (credentials: OAuthCredentials) => Promise<Response>,
   ): Promise<Response> {
     let response = await request(await this.oauth.getAccessToken(false, profile));
-    if (response.status === 401) response = await request(await this.oauth.getAccessToken(true, profile));
+    if (response.status === 401) {
+      await response.body?.cancel();
+      response = await request(await this.oauth.getAccessToken(true, profile));
+    }
     return response;
   }
 
@@ -109,21 +112,30 @@ export class CodexTransport {
     retryTransient = false,
   ): Promise<Response> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.max(10, this.requestTimeoutSeconds()) * 1000);
+    const timeout = setTimeout(() => controller.abort(new Error("Codex request timed out")), Math.max(10, this.requestTimeoutSeconds()) * 1000);
     const listener = cancellation.onCancellationRequested(() => controller.abort());
     if (cancellation.isCancellationRequested) controller.abort();
+    let handedOff = false;
+    const cleanup = (): void => { clearTimeout(timeout); listener.dispose(); };
     try {
       for (let attempt = 0; ; attempt += 1) {
         try {
-          return await this.fetcher(url, { ...init, signal: controller.signal });
+          const response = await this.fetcher(url, { ...init, signal: controller.signal });
+          if (controller.signal.aborted) {
+            await response.body?.cancel();
+            controller.signal.throwIfAborted();
+          }
+          if (!response.body) return response;
+          const wrapped = wrapResponseBody(response, controller.signal, cleanup);
+          handedOff = true;
+          return wrapped;
         } catch (error) {
           if (!retryTransient || attempt >= 2 || controller.signal.aborted || !isTransientNetworkError(error)) throw error;
           await waitForRetry(250 * 2 ** attempt, controller.signal);
         }
       }
     } finally {
-      clearTimeout(timeout);
-      listener.dispose();
+      if (!handedOff) cleanup();
     }
   }
 }
@@ -135,12 +147,61 @@ function isTransientNetworkError(error: unknown): boolean {
   return /fetch failed|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET|socket hang up/i.test(detail);
 }
 
+/** Keep the cancellation subscription and total deadline alive until body disposal. */
+function wrapResponseBody(response: Response, signal: AbortSignal, cleanup: () => void): Response {
+  const reader = response.body!.getReader();
+  let disposed = false;
+  let abort: () => void;
+  const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    signal.removeEventListener("abort", abort);
+    cleanup();
+  };
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      abort = () => {
+        if (disposed) return;
+        controller.error(signal.reason ?? new DOMException("Aborted", "AbortError"));
+        void reader.cancel().catch(() => undefined).finally(() => reader.releaseLock());
+        dispose();
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+    },
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (disposed) return;
+        if (result.done) {
+          controller.close();
+          dispose();
+          reader.releaseLock();
+        } else controller.enqueue(result.value);
+      } catch (error) {
+        if (!disposed) {
+          controller.error(error);
+          dispose();
+          reader.releaseLock();
+        }
+      }
+    },
+    async cancel(reason) {
+      dispose();
+      try { await reader.cancel(reason); } finally { reader.releaseLock(); }
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
 function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, delay);
-    signal.addEventListener("abort", () => {
+    const abort = (): void => {
       clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    }, { once: true });
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, delay);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
   });
 }

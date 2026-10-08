@@ -63,3 +63,60 @@ test("retries transient response fetch failures without refreshing OAuth", async
   assert.equal(fetchAttempts, 3);
   assert.equal(tokenRequests, 1);
 });
+
+function tokenSource(): { token: vscode.CancellationToken; cancel(): void; disposed(): boolean } {
+  let callback = () => {};
+  let disposed = false;
+  const token = { isCancellationRequested: false, onCancellationRequested(listener: () => void) {
+    callback = listener;
+    return { dispose() { disposed = true; } };
+  } };
+  return { token: token as vscode.CancellationToken, cancel() { token.isCancellationRequested = true; callback(); }, disposed: () => disposed };
+}
+
+test("retains cancellation after headers and disposes the blocked body", async () => {
+  const source = tokenSource();
+  let aborted = false;
+  let cancelled = false;
+  const fetcher: typeof fetch = async (_url, init) => {
+    init!.signal!.addEventListener("abort", () => { aborted = true; });
+    return new Response(new ReadableStream({ cancel() { cancelled = true; } }));
+  };
+  const transport = new CodexTransport({ getAccessToken: async () => ({ token: "synthetic" }) } as never, "test", () => 10, () => "1", fetcher);
+  const response = await transport.sendResponse({}, source.token);
+  assert.equal(source.disposed(), false);
+  const reading = response.text();
+  source.cancel();
+  await assert.rejects(reading, /abort/i);
+  assert.equal(aborted, true);
+  assert.equal(cancelled, true);
+  assert.equal(source.disposed(), true);
+});
+
+test("cleans up on EOF and cancels the first 401 body before one forced refresh", async () => {
+  const refreshes: boolean[] = [];
+  let attempts = 0;
+  let cancelled = false;
+  const source = tokenSource();
+  const fetcher: typeof fetch = async () => ++attempts === 1
+    ? new Response(new ReadableStream({ cancel() { cancelled = true; } }), { status: 401 })
+    : new Response("done");
+  const transport = new CodexTransport({ getAccessToken: async (force: boolean) => { refreshes.push(force); return { token: "synthetic" }; } } as never, "test", () => 10, () => "1", fetcher);
+  const response = await transport.sendResponse({}, source.token);
+  assert.equal(await response.text(), "done");
+  assert.deepEqual(refreshes, [false, true]);
+  assert.equal(cancelled, true);
+  assert.equal(source.disposed(), true);
+});
+
+test("the total timeout still aborts a stalled body after headers", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const source = tokenSource();
+  const transport = new CodexTransport({ getAccessToken: async () => ({ token: "synthetic" }) } as never, "test", () => 10, () => "1",
+    async () => new Response(new ReadableStream()));
+  const response = await transport.sendResponse({}, source.token);
+  const reading = response.text();
+  t.mock.timers.tick(10000);
+  await assert.rejects(reading, /timed out/);
+  assert.equal(source.disposed(), true);
+});

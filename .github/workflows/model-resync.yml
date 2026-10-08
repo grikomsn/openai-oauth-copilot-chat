@@ -36,6 +36,9 @@ jobs:
           title: Resync model metadata from live sources
           commit-message: Resync model metadata
           body-path: model-resync-report.md
+          add-paths: |
+            src/
+            .changeset/
           labels: |
             automation
             model-metadata

@@ -2,9 +2,9 @@
 
 ## Install from a VSIX
 
-Run `code --install-extension openai-oauth-copilot-chat-0.1.0.vsix`, then reload VS Code.
+Run `code --install-extension openai-oauth-copilot-chat-1.0.0.vsix`, then reload VS Code.
 
-Use **Codex Bridge: Add ChatGPT Account** to authenticate and assign the account a profile ID. After sign-in, run **Chat: Manage Language Models**, choose **Add Models → Codex Bridge**, and enter the same profile ID. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window. Leaving the profile field empty selects the `default` profile.
+Use **Chat: Manage Language Models → Add Models → Codex Bridge** to add an entry: it prompts for a group name and profile ID and creates the entry immediately. The entry lists no models until the profile is signed in, and Codex Bridge then offers to start ChatGPT sign-in right away. Conversely, running any sign-in command (**Add ChatGPT Account**, **Sign In with ChatGPT**, manual sign-in, or CLI session import) provisions the matching entry automatically when none exists yet. VS Code keeps each named entry separate, so multiple ChatGPT accounts can coexist in one window. Leaving the profile field empty selects the `default` profile.
 
 Sessions use the current profile store; older single-account session formats are not loaded. Model IDs include every profile, including `default`, so reselect the chat model after upgrading. **Codex Bridge: Select Profile for Usage and Management** chooses which account the status bar and management commands display; model requests always use the account attached to the selected Language Models entry.
 

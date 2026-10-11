@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
+import { hasObservedProfile, observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
 import type { MetadataCache } from "./models/metadata";
 
 test("serializes observations without storing account details or credentials", async () => {
@@ -14,4 +14,14 @@ test("serializes observations without storing account details or credentials", a
   assert.deepEqual(reconcileProfiles(journal, ["work", "new"]), {
     entriesWithoutSessions: ["personal"], accountsWithoutObservedEntries: ["new"],
   });
+});
+
+test("hasObservedProfile distinguishes first-sighting from known profiles", async () => {
+  const values = new Map<string, unknown>();
+  const state: MetadataCache = { get: <T>(key: string) => values.get(key) as T | undefined,
+    async update(key, value) { values.set(key, value); } };
+  assert.equal(hasObservedProfile(state, "work"), false);
+  await observeProfile(state, "work", 0);
+  assert.equal(hasObservedProfile(state, "work"), true);
+  assert.equal(hasObservedProfile(state, "personal"), false);
 });

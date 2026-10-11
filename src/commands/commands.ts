@@ -15,16 +15,40 @@ export function registerCodexCommands(
 ): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand("openaiCodex.manage", () => manage(oauth, provider, output, usageStatus)),
+    vscode.commands.registerCommand("openaiCodex.configureEntry", () => configureEntry(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.addAccount", () => addAccount(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.selectProfile", () => selectProfile(oauth, provider)),
     vscode.commands.registerCommand("openaiCodex.signIn", () => browserSignIn(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.signInManual", () => manualSignIn(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.importCodexSession", () => importCodexSession(oauth, provider, output)),
+    provider.onSignInRequested((profile) => {
+      void autoSignInForProfile(oauth, provider, output, profile);
+    }),
     vscode.commands.registerCommand("openaiCodex.testConnection", () => testConnection(provider, output)),
     vscode.commands.registerCommand("openaiCodex.refreshModels", () => refreshModels(provider, output)),
     vscode.commands.registerCommand("openaiCodex.showUsage", () => showUsage(provider, output)),
     vscode.commands.registerCommand("openaiCodex.diagnostics", () => diagnostics(oauth, output)),
   ];
+}
+
+/**
+ * Offers sign-in when a natively added entry names a profile with no session.
+ * Suppressed while the extension's own provisioning command resolves the fresh
+ * group, and debounced by the provider gate on repeated host re-resolves.
+ */
+async function autoSignInForProfile(
+  oauth: OpenAIOAuth,
+  provider: OpenAICodexProvider,
+  output: vscode.OutputChannel,
+  profile: string,
+): Promise<void> {
+  if (await oauth.hasSession(profile)) return;
+  const action = await vscode.window.showInformationMessage(
+    `Codex Bridge entry “${profile}” is not signed in yet. Sign in with ChatGPT now?`,
+    "Sign in",
+    "Later",
+  );
+  if (action === "Sign in") await browserSignIn(oauth, provider, output, profile);
 }
 
 async function manage(
@@ -103,6 +127,7 @@ async function browserSignIn(
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-sign-in", profile);
     vscode.window.showInformationMessage(`Signed in to Codex Bridge profile “${profile}” with ChatGPT.`);
+    await provisionEntryAfterSignIn(provider, profile);
   } catch (error) {
     attempt?.cancel();
     showError("ChatGPT sign-in failed", error, output);
@@ -132,6 +157,7 @@ async function manualSignIn(
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-sign-in", profile);
     vscode.window.showInformationMessage(`Signed in to Codex Bridge profile “${profile}” with ChatGPT.`);
+    await provisionEntryAfterSignIn(provider, profile);
   } catch (error) {
     showError("ChatGPT manual sign-in failed", error, output);
   }
@@ -156,6 +182,7 @@ async function importCodexSession(
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-import", profile);
     vscode.window.showInformationMessage(`Imported Codex CLI session${session.email ? ` for ${session.email}` : ""} into profile “${profile}”.`);
+    await provisionEntryAfterSignIn(provider, profile);
   } catch (error) {
     showError("Unable to import Codex CLI session", error, output);
   }
@@ -164,18 +191,71 @@ async function importCodexSession(
 async function addAccount(oauth: OpenAIOAuth, provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
   const profile = await promptProfileId();
   if (!profile) return;
+  if (!await addAccountForProfile(oauth, provider, output, profile)) return;
+  await provisionEntryAfterSignIn(provider, profile);
+}
+
+/**
+ * Provisions the native entry for a freshly signed-in profile when the user
+ * has not added one yet. The discovery journal skips profiles that already
+ * have an entry, and the suppression latch keeps the provisioning resolve
+ * from re-triggering auto sign-in.
+ */
+async function provisionEntryAfterSignIn(provider: OpenAICodexProvider, profile: string): Promise<void> {
+  if (provider.hasObservedProfile(profile)) return;
+  provider.suppressNextAutoSignIn(profile);
+  try {
+    // The host command destructures {vendor, name, ...configuration}; the rest
+    // becomes the entry's stored configuration verbatim.
+    await vscode.commands.executeCommand("lm.migrateLanguageModelsProviderGroup", {
+      vendor: "openai-codex",
+      name: profile,
+      profile,
+    });
+  } catch {
+    await vscode.commands.executeCommand("workbench.action.chat.manageLanguageModels");
+    vscode.window.showInformationMessage(`Sign-in complete. Add Codex Bridge in Manage Language Models and enter profile “${profile}”.`);
+  }
+}
+
+/**
+ * Native management-command configure flow: provisions the entry group first
+ * (so it appears in Manage Language Models even before signing in), then runs
+ * the browser sign-in only when that profile has no session yet. The first
+ * provisioning resolve is suppressed so it is not mistaken for a native add.
+ */
+async function configureEntry(oauth: OpenAIOAuth, provider: OpenAICodexProvider, output: vscode.OutputChannel): Promise<void> {
+  const profile = await promptProfileId();
+  if (!profile) return;
+  provider.suppressNextAutoSignIn(profile);
+  try {
+    // The host command destructures {vendor, name, ...configuration}; the rest
+    // becomes the entry's stored configuration verbatim.
+    await vscode.commands.executeCommand("lm.migrateLanguageModelsProviderGroup", {
+      vendor: "openai-codex",
+      name: profile,
+      profile,
+    });
+  } catch {
+    // Host version without the provisioning command: fall back to the editor.
+    await vscode.commands.executeCommand("workbench.action.chat.manageLanguageModels");
+  }
   if (await oauth.hasSession(profile)) {
-    const replace = await vscode.window.showWarningMessage(
-      `Replace the ChatGPT session stored for profile “${profile}”?`,
-      { modal: true },
-      "Replace",
-    );
-    if (replace !== "Replace") return;
+    provider.setActiveProfile(profile);
+    vscode.window.showInformationMessage(`Codex Bridge entry “${profile}” is ready in Manage Language Models.`);
+    return;
+  }
+  await addAccountForProfile(oauth, provider, output, profile);
+}
+
+async function addAccountForProfile(oauth: OpenAIOAuth, provider: OpenAICodexProvider, output: vscode.OutputChannel, profile: string): Promise<boolean> {
+  if (await oauth.hasSession(profile)) {
+    provider.setActiveProfile(profile);
+    vscode.window.showInformationMessage(`ChatGPT profile “${profile}” is already signed in.`);
+    return true;
   }
   await browserSignIn(oauth, provider, output, profile);
-  if (await oauth.hasSession(profile)) {
-    vscode.window.showInformationMessage(`Add Codex Bridge in Chat: Manage Language Models and enter profile “${profile}”.`);
-  }
+  return oauth.hasSession(profile);
 }
 
 async function selectProfile(oauth: OpenAIOAuth, provider: OpenAICodexProvider): Promise<void> {

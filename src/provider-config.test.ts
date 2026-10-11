@@ -12,7 +12,10 @@ test("declares optional native profile configuration without a management-comman
   };
   const provider = manifest.contributes.languageModelChatProviders.find((item) => item.vendor === "openai-codex");
   assert.ok(provider);
+  // A managementCommand replaces the native Add Models prompt with a no-op
+  // resolve; the schema-driven profile prompt is the supported add flow.
   assert.equal(provider.managementCommand, undefined);
+  assert.ok(manifest.contributes.commands.some((item) => item.command === "openaiCodex.configureEntry"));
   assert.equal((provider.configuration as { required?: string[] }).required, undefined);
   assert.match(
     manifest.contributes.commands.find((item) => item.command === "openaiCodex.selectProfile")?.title ?? "",

@@ -21,6 +21,7 @@ import {
   type CodexModelMetadata,
 } from "./models/catalog";
 import { DEFAULT_OAUTH_PROFILE, normalizeProfileId, OpenAIOAuth } from "./auth/auth";
+import { AutoSignInGate } from "./auth/auto-signin";
 import { partText } from "./provider/messages";
 import { buildRequest } from "./provider/request";
 import { consumeStream } from "./provider/response";
@@ -38,7 +39,7 @@ import { codexModelsClientVersion } from "./transport/protocol";
 import { CatalogCache } from "./models/catalog-cache";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
 import { modelPricingFields, openAIModelCost } from "./models/pricing";
-import { observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
+import { hasObservedProfile, observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
 import { activeProfileFromState, profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
 
 /** Live model information registered with VS Code Chat. */
@@ -66,9 +67,11 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   private readonly usageEmitter = new vscode.EventEmitter<{ profile: string; usage: CodexUsageSnapshot }>();
   private readonly activeProfileEmitter = new vscode.EventEmitter<string>();
+  private readonly signInRequestedEmitter = new vscode.EventEmitter<string>();
   readonly onDidChangeLanguageModelChatInformation = this.changeEmitter.event;
   readonly onDidChangeUsage = this.usageEmitter.event;
   readonly onDidChangeActiveProfile = this.activeProfileEmitter.event;
+  readonly onSignInRequested = this.signInRequestedEmitter.event;
   private readonly usageByProfile = new Map<string, CodexUsageSnapshot>();
   private readonly lastQuotaFetchAt = new Map<string, number>();
   private readonly modelCaches = new Map<string, CatalogCache<CodexModelMetadata[]>>();
@@ -76,6 +79,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   private activeProfile: string;
   private readonly transport: CodexTransport;
   private readonly metadata: ModelsDevMetadata;
+  private readonly autoSignInGate = new AutoSignInGate();
 
   constructor(
     private readonly oauth: OpenAIOAuth,
@@ -102,8 +106,18 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     return reconcileProfiles(readProfileJournal(this.metadataCache), await this.oauth.listProfiles());
   }
 
+  /** Whether the host has ever resolved this profile through a configured entry. */
+  hasObservedProfile(profile: string): boolean {
+    return hasObservedProfile(this.metadataCache, profile);
+  }
+
   fireDidChange(): void {
     this.changeEmitter.fire();
+  }
+
+  /** Suppresses the auto sign-in prompt for the next resolution of `profile`. */
+  suppressNextAutoSignIn(profile: string): void {
+    this.autoSignInGate.suppressNext(profile);
   }
 
   clearModelCache(profile?: string): void {
@@ -219,7 +233,17 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       return [];
     }
     if (!await this.oauth.hasSession(profile)) {
+      // Both entry-creation paths (native Add Models and the provisioning
+      // command) reach the provider as a per-group resolve. A profile the host
+      // has never asked about before means a new entry was just created; offer
+      // sign-in. The gate dedupes rapid re-resolves and skips resolutions that
+      // belong to the extension's own provisioning command.
+      const firstSighting = !hasObservedProfile(this.metadataCache, profile);
       await observeProfile(this.metadataCache, profile, 0);
+      if (firstSighting && this.autoSignInGate.shouldStartSignIn(profile)) {
+        this.output.appendLine(`[auth] entry for profile "${profile}" added natively; offering sign-in`);
+        this.signInRequestedEmitter.fire(profile);
+      }
       return [];
     }
     const models = expandCodexModelVariants(await this.fetchModels(token, profile));

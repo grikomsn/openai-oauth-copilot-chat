@@ -42,6 +42,10 @@
         "title": "Codex Bridge: Manage Connection"
       },
       {
+        "command": "openaiCodex.configureEntry",
+        "title": "Codex Bridge: Add Provider Entry"
+      },
+      {
         "command": "openaiCodex.addAccount",
         "title": "Codex Bridge: Add ChatGPT Account"
       },

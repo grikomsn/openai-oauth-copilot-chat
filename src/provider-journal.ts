@@ -7,7 +7,20 @@ const mutations = new WeakMap<MetadataCache, Promise<void>>();
 
 /** Discovery history contains aliases and counts only; VS Code owns native entries. */
 export function readProfileJournal(state: MetadataCache): ProfileJournal {
-  return state.get<ProfileJournal>(JOURNAL_KEY) ?? {};
+  const value = state.get<unknown>(JOURNAL_KEY);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([profile, raw]) => {
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(profile) || !raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const record = raw as Partial<ProfileObservation>;
+    if (typeof record.modelCount !== "number" || !Number.isInteger(record.modelCount) || record.modelCount < 0
+      || typeof record.updatedAt !== "number" || !Number.isFinite(record.updatedAt)) return [];
+    return [[profile, { modelCount: record.modelCount, updatedAt: record.updatedAt }]];
+  }));
+}
+
+/** Whether the host has ever resolved this profile through a configured entry. */
+export function hasObservedProfile(state: MetadataCache, profile: string): boolean {
+  return Object.hasOwn(readProfileJournal(state), profile);
 }
 
 export async function observeProfile(state: MetadataCache, profile: string, modelCount: number): Promise<void> {

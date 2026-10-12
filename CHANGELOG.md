@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+### Patch Changes
+
+- ed62577: Restore reasoning-effort controls for Codex models in VS Code Insiders Copilot SDK sessions by publishing the standard reasoningEffort schema property. Keep speed configuration separate and continue accepting legacy combined request values.
+
 ## 1.1.0
 
 ### Minor Changes

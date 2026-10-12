@@ -214,46 +214,20 @@ export function buildModelConfigurationSchema(
     : spec.defaultEffort;
   const defaultSummary = defaults?.reasoningSummary ?? spec.defaultReasoningSummary;
   const defaultSpeedMode = defaults?.speedMode === "fast" ? "fast" : "normal";
-  // VS Code renders one control per group. When Context Window occupies the
-  // tokens slot, fold Fast into the reasoning choices in the navigation slot.
-  const combinesSpeedMode = spec.supportsFast && Boolean(contextOptions?.length);
-  const exposesSpeedMode = spec.supportsFast && !combinesSpeedMode;
-  const modeOptions = spec.efforts.flatMap((effort) => {
-    const label = formatOptionLabel(effort);
-    const description = spec.descriptions[effort] ?? label;
-    return [
-      { value: `normal:${effort}`, label, description },
-      {
-        value: `fast:${effort}`,
-        label: `${label} Fast`,
-        description: `${description}. ${spec.fastDescription ?? "Faster generation with increased usage"}`,
-      },
-    ];
-  });
+  // The Insiders BYOK bridge discovers effort only through the reasoningEffort key.
+  // Keep speed separate so its values remain valid OpenAI reasoning efforts.
   return {
     type: "object",
     properties: {
-      ...(combinesSpeedMode ? {
-        mode: {
-          type: "string",
-          title: "Reasoning & Speed",
-          enum: modeOptions.map((option) => option.value),
-          enumItemLabels: modeOptions.map((option) => option.label),
-          enumDescriptions: modeOptions.map((option) => option.description),
-          default: `${defaultSpeedMode}:${defaultEffort}`,
-          group: "navigation",
-        },
-      } : {
-        reasoningEffort: {
-          type: "string",
-          title: "Reasoning Effort",
-          enum: [...spec.efforts],
-          enumItemLabels: spec.efforts.map(formatOptionLabel),
-          enumDescriptions: spec.efforts.map((effort) => spec.descriptions[effort] ?? formatOptionLabel(effort)),
-          default: defaultEffort,
-          group: "navigation",
-        },
-      }),
+      reasoningEffort: {
+        type: "string",
+        title: "Reasoning Effort",
+        enum: [...spec.efforts],
+        enumItemLabels: spec.efforts.map(formatOptionLabel),
+        enumDescriptions: spec.efforts.map((effort) => spec.descriptions[effort] ?? formatOptionLabel(effort)),
+        default: defaultEffort,
+        group: "navigation",
+      },
       webSearch: {
         type: "boolean",
         title: "Web Search",
@@ -268,7 +242,7 @@ export function buildModelConfigurationSchema(
         default: defaults?.imageGeneration ?? false,
         group: "navigation",
       },
-      ...(exposesSpeedMode ? {
+      ...(spec.supportsFast ? {
         speedMode: {
           type: "string",
           title: "Speed Mode",

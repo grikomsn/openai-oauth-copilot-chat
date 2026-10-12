@@ -244,7 +244,7 @@ test("exposes the Context Window control when tiers fit", () => {
   assert.equal("contextSize" in plain.properties, false);
 });
 
-test("combines reasoning effort and Fast mode when Context Window uses the token control", () => {
+test("exposes reasoning effort to the Insiders BYOK bridge when Context Window is enabled", () => {
   const highSpec: ModelOptionSpec = {
     ...spec,
     efforts: ["high"],
@@ -257,12 +257,23 @@ test("combines reasoning effort and Fast mode when Context Window uses the token
     contextSizeOptions(244_800),
   );
 
-  assert.deepEqual(schema.properties.mode.enum, ["normal:high", "fast:high"]);
-  assert.deepEqual(schema.properties.mode.enumItemLabels, ["High", "High Fast"]);
-  assert.equal(schema.properties.mode.default, "fast:high");
-  assert.equal(schema.properties.mode.group, "navigation");
-  assert.equal("reasoningEffort" in schema.properties, false);
-  assert.equal("speedMode" in schema.properties, false);
+  // The Insiders BYOK bridge reads this exact key, not other navigation properties.
+  const effortSchema = schema.properties.reasoningEffort;
+  assert.ok(effortSchema, "BYOK models must advertise reasoningEffort");
+  assert.deepEqual(effortSchema.enum, ["high"]);
+  assert.deepEqual(effortSchema.enumItemLabels, ["High"]);
+  assert.equal(effortSchema.default, "high");
+  assert.equal(effortSchema.group, "navigation");
+  assert.equal("mode" in schema.properties, false);
+  assert.deepEqual(schema.properties.speedMode.enum, ["normal", "fast"]);
+  assert.equal(schema.properties.speedMode.default, "fast");
+  assert.equal(schema.properties.speedMode.group, undefined);
+
+  const bridgeEfforts = (effortSchema.enum as unknown[]).filter((value): value is string => typeof value === "string");
+  const bridgedOptions = resolveModelRequestOptions(highSpec, { reasoningEffort: bridgeEfforts[0] }, {}, "normal");
+  assert.deepEqual(applyModelRequestOptions({}, bridgedOptions), {
+    reasoning: { effort: "high", summary: "auto" },
+  });
 
   const options = resolveModelRequestOptions(
     highSpec,

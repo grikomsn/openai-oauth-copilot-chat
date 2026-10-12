@@ -73,7 +73,22 @@ to replace a saved zero selection.
 
 Context Window uses the dedicated tokens group so it remains visible beside
 reasoning controls. VS Code renders only one enum property per group.
-For Fast-capable models, the reasoning control therefore pairs each effort with
-a Fast choice, such as High and High Fast. Selecting a Fast choice sends the
-same priority service tier as the standalone Speed Mode control used by models
-without a Context Window selector.
+Reasoning effort is always published under `reasoningEffort`, with the exact
+values advertised by the live Codex directory. The VS Code Insiders Copilot SDK
+BYOK bridge reads this specific property when discovering model effort options;
+a combined `mode` property is not recognized. The selected effort is sent to
+OpenAI as `reasoning.effort`, independently of speed.
+
+Fast-capable models expose a separate Speed Mode setting. When Context Window
+occupies the tokens group, Speed Mode remains available in per-model
+configuration rather than replacing the reasoning control. Fast requests send
+`service_tier: "priority"`. The SDK bridge forwards reasoning effort, but does
+not currently expose all of the extension's other per-model controls.
+
+After upgrading from the combined High / High Fast picker, reselect the desired
+effort and speed: VS Code may discard saved `mode` values that are no longer in
+the schema. Legacy combined values are still accepted if supplied by a caller.
+
+References: [VS Code thinking-effort documentation](https://code.visualstudio.com/docs/agent-customization/language-models#configure-thinking-effort),
+[Insiders BYOK bridge](https://github.com/microsoft/vscode/blob/ff00e788322523ee1e9e8ee2c9bb4b89af93a3c2/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostByokLmHandler.ts),
+and [OpenAI reasoning documentation](https://developers.openai.com/api/docs/guides/reasoning).

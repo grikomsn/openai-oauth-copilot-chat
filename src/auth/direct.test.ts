@@ -24,12 +24,18 @@ test("requests independent PKCE/state/nonce and reuses a registered client witho
   const url = new URL(first.url);
   assert.equal(url.searchParams.get("client_id"), "dynamic_agent_client");
   assert.equal(url.searchParams.get("agent_name_hint"), "Codex Bridge for Copilot Chat");
+  assert.deepEqual([...url.searchParams.keys()].sort(), [
+    "client_id", "agent_name_hint", "ext_agent_host_id", "response_type", "redirect_uri", "scope", "resource", "state", "nonce",
+    "code_challenge_method", "code_challenge",
+  ].sort());
+  assert.equal(url.searchParams.has("originator"), false);
   assert.equal(url.searchParams.get("code_challenge"), createHash("sha256").update(first.verifier).digest("base64url"));
   const next = createDirectFlow("urn:uuid:host", "http://127.0.0.1:43211/auth/callback", { clientId: "oaiapp_synthetic", subject: "synthetic-subject" });
   assert.notEqual(first.state, next.state);
   assert.notEqual(first.nonce, next.nonce);
   assert.equal(new URL(next.url).searchParams.has("agent_name_hint"), false);
   assert.equal(new URL(next.url).searchParams.get("client_id"), "oaiapp_synthetic");
+  assert.equal(new URL(next.url).searchParams.has("originator"), false);
 });
 
 test("exchanges with the issued client and exact callback/resource, checking plan permission and identity", async () => {
@@ -38,6 +44,8 @@ test("exchanges with the issued client and exact callback/resource, checking pla
   const fetcher: typeof fetch = async (input, init) => {
     requests += 1;
     assert.equal(input, CHATGPT_TOKEN_URL);
+    assert.equal(new Headers(init?.headers).get("Originator"), "openai-oauth-copilot-chat");
+    assert.equal(new Headers(init?.headers).get("User-Agent"), "openai-oauth-copilot-chat");
     const form = new URLSearchParams(String(init?.body));
     assert.equal(form.get("client_id"), "oaiapp_synthetic");
     assert.equal(form.get("redirect_uri"), flow.redirectUri);

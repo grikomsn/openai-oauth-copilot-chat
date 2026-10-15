@@ -64,6 +64,8 @@ After sign-in, the **Codex** status-bar item shows ChatGPT subscription utilizat
 
 **Continue with ChatGPT** listens on an available `127.0.0.1` loopback port, so it does not require port 1455. The legacy Codex OAuth flow redirects to `http://localhost:1455/auth/callback`. If that legacy port is busy, use **Codex Bridge: Sign In Manually**, finish authentication, and paste the complete callback URL shown in the browser address bar. Manual callbacks must include both the authorization code and matching OAuth state.
 
+If the authorization page reports `invalid_authorize_request`, cancel the pending attempt, reload VS Code after updating the extension, and start a fresh **Continue with ChatGPT** flow. Do not reuse an old authorization URL: its state, PKCE verifier, and callback listener belong to the original attempt. Direct-plan authorization sends the documented query parameters; the legacy `originator` query parameter is not included. Authenticated HTTP requests still identify Codex Bridge independently.
+
 **Codex Bridge: Import Codex CLI Session (Advanced)** copies the CLI's OAuth access and refresh credentials into VS Code Secret Storage. Prefer a fresh ChatGPT sign-in. Import only when you trust the extension and intentionally want both clients to use credentials derived from the same CLI session.
 
 ## Models do not appear

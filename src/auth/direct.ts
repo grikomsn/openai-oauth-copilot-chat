@@ -37,7 +37,6 @@ export function createDirectFlow(hostId: string, redirectUri: string, registrati
     state, nonce,
     code_challenge_method: "S256",
     code_challenge: createHash("sha256").update(verifier).digest("base64url"),
-    originator: OAUTH_ORIGINATOR,
   }).toString();
   return { url: url.toString(), state, verifier, nonce, redirectUri, registration };
 }

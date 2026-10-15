@@ -18,11 +18,12 @@ export async function consumeStream(
   token: vscode.CancellationToken,
   parts: ResponseParts,
   onUsage?: (usage: Record<string, unknown>) => void,
+  toolNamespace?: string,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   const parser = new ResponsesStreamParser();
-  const reporter = new ResponseReporter(progress, parts);
+  const reporter = new ResponseReporter(progress, parts, toolNamespace);
   const report = (events: CodexStreamEvent[]): void => {
     for (const event of events) {
       reporter.report(event);
@@ -58,6 +59,7 @@ export class ResponseReporter {
   constructor(
     private readonly progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     private readonly parts: ResponseParts,
+    private readonly toolNamespace?: string,
   ) {}
 
   closeThinking(): void {
@@ -67,6 +69,7 @@ export class ResponseReporter {
   }
 
   report(event: CodexStreamEvent): void {
+    if (event.failure) throw event.failure;
     if (event.error) throw new Error(event.error);
     if (event.reasoning) {
       this.thinkingOpen = true;
@@ -81,6 +84,7 @@ export class ResponseReporter {
       }));
     }
     if (event.toolCall) {
+      if (this.toolNamespace && event.toolCall.namespace && event.toolCall.namespace !== this.toolNamespace) throw new Error("ChatGPT returned a tool from an unknown namespace.");
       this.progress.report(new this.parts.LanguageModelToolCallPart(event.toolCall.id, event.toolCall.name, parseArguments(event.toolCall.arguments)));
     }
     if (event.webSearchCall) reportDataPart(this.progress, this.parts, "web-search", event.webSearchCall);

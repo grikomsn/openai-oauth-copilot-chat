@@ -7,21 +7,27 @@ import { EXTENSION_DISPLAY_NAME, extensionUserAgent } from "./transport/protocol
 import { formatUsageStatusBar, formatUsageTooltip } from "./usage/presentation";
 import { usageSnapshotForPersistence, type CodexUsageSnapshot } from "./usage/domain";
 import { activeProfileFromState } from "./provider-profile";
+import { createRefreshLock } from "./auth/refresh-lock";
+import { join } from "node:path";
 
 const USAGE_STATE_KEY = "openaiCodex.usageSnapshots.v2";
 const ACTIVE_PROFILE_STATE_KEY = "openaiCodex.activeProfile.v1";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Codex Bridge");
-  const oauth = new OpenAIOAuth(context.secrets);
   const version = context.extension.packageJSON.version as string;
+  const userAgent = extensionUserAgent(version, vscode.version);
+  const oauth = new OpenAIOAuth(context.secrets, fetch, Date.now, {
+    hostState: context.globalState, refreshLock: createRefreshLock(join(context.globalStorageUri.fsPath, "refresh-locks")),
+    userAgent,
+  });
   const storedUsage = context.globalState.get<Readonly<Record<string, CodexUsageSnapshot>>>(USAGE_STATE_KEY)
     ?? {};
   const activeProfile = activeProfileFromState(context.globalState.get<unknown>(ACTIVE_PROFILE_STATE_KEY));
   const provider = new OpenAICodexProvider(
     oauth,
     output,
-    extensionUserAgent(version, vscode.version),
+    userAgent,
     storedUsage,
     context.globalState,
     fetch,

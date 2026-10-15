@@ -54,6 +54,10 @@
         "title": "Codex Bridge: Select Profile for Usage and Management"
       },
       {
+        "command": "openaiCodex.signInDirect",
+        "title": "Codex Bridge: Continue with ChatGPT (App Limits)"
+      },
+      {
         "command": "openaiCodex.signIn",
         "title": "Codex Bridge: Sign In with ChatGPT"
       },
@@ -159,6 +163,19 @@
           "type": "boolean",
           "default": true,
           "description": "Show ChatGPT Codex quota utilization and inference token usage in the status bar."
+        },
+        "openaiCodex.requestCompression": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "none"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "Compress large ChatGPT requests with zstd when the VS Code runtime supports it.",
+            "Send plain JSON requests."
+          ],
+          "description": "Request encoding for ChatGPT connections. Disable to diagnose proxy compatibility."
         }
       }
     },
@@ -202,5 +219,8 @@
     "@types/vscode": "^1.125.0",
     "@vscode/vsce": "^3.9.2",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
   }
 }

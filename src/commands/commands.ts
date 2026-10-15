@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { DEFAULT_OAUTH_PROFILE, normalizeProfileId, type AuthorizationFlow, OpenAIOAuth } from "../auth/auth";
 import { messageOf } from "../errors";
 import { OpenAICodexProvider } from "../provider";
-import { EXTENSION_DISPLAY_NAME } from "../transport/protocol";
+import { CHATGPT_USAGE_SETTINGS_URL, EXTENSION_DISPLAY_NAME } from "../transport/protocol";
 import { formatUsageRows, type UsageDisplayRow } from "../usage/presentation";
 
 export function registerCodexCommands(
@@ -19,6 +19,7 @@ export function registerCodexCommands(
     vscode.commands.registerCommand("openaiCodex.addAccount", () => addAccount(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.selectProfile", () => selectProfile(oauth, provider)),
     vscode.commands.registerCommand("openaiCodex.signIn", () => browserSignIn(oauth, provider, output)),
+    vscode.commands.registerCommand("openaiCodex.signInDirect", () => browserSignIn(oauth, provider, output, provider.getActiveProfile(), true)),
     vscode.commands.registerCommand("openaiCodex.signInManual", () => manualSignIn(oauth, provider, output)),
     vscode.commands.registerCommand("openaiCodex.importCodexSession", () => importCodexSession(oauth, provider, output)),
     provider.onSignInRequested((profile) => {
@@ -60,6 +61,7 @@ async function manage(
   const profile = provider.getActiveProfile();
   const session = await oauth.sessionInfo(profile);
   const picked = await vscode.window.showQuickPick(session ? [
+    { label: "$(globe) Continue with ChatGPT (app limits)", action: "direct", description: "Connect this profile using ChatGPT plan usage" },
     { label: "$(list-tree) Reconcile accounts and observed entries", action: "reconcile" },
     { label: "$(account) Select profile for usage and management", action: "switch" },
     { label: "$(add) Add ChatGPT account", action: "add" },
@@ -69,6 +71,7 @@ async function manage(
     { label: "$(output) Show Codex Bridge logs", action: "logs" },
     { label: "$(sign-out) Sign out of Codex Bridge", action: "signout" },
   ] : [
+    { label: "$(globe) Continue with ChatGPT (app limits)", action: "direct", description: `Profile: ${profile}` },
     { label: "$(globe) Sign in with ChatGPT", action: "signin", description: `Profile: ${profile}` },
     { label: "$(list-tree) Reconcile accounts and observed entries", action: "reconcile" },
     { label: "$(account) Select profile for usage and management", action: "switch" },
@@ -87,6 +90,7 @@ async function manage(
     await vscode.window.showQuickPick(rows.length ? rows : [{ label: "Stored accounts match the entries last observed", description: "" }], { title: "Account reconciliation — discovery history may include removed entries" });
     await vscode.commands.executeCommand("workbench.action.chat.manage");
   } else if (picked.action === "signin") await browserSignIn(oauth, provider, output, profile);
+  else if (picked.action === "direct") await browserSignIn(oauth, provider, output, profile, true);
   else if (picked.action === "switch") await selectProfile(oauth, provider);
   else if (picked.action === "add") await addAccount(oauth, provider, output);
   else if (picked.action === "manual") await manualSignIn(oauth, provider, output, profile);
@@ -96,12 +100,13 @@ async function manage(
   else if (picked.action === "refresh") await refreshModels(provider, output);
   else if (picked.action === "logs") output.show(true);
   else if (picked.action === "signout") {
-    await oauth.signOut(profile);
+    const result = await oauth.signOut(profile);
     provider.clearModelCache(profile);
     provider.clearUsage(profile);
     usageStatus.hide();
     provider.fireDidChange();
-    vscode.window.showInformationMessage(`Signed out of Codex Bridge profile “${profile}”.`);
+    if (result.revocationConfirmed === false) vscode.window.showWarningMessage(`Signed out locally from “${profile}”. Remote revocation was not confirmed; disconnect the app in ChatGPT Settings if needed.`);
+    else vscode.window.showInformationMessage(`Signed out of Codex Bridge profile “${profile}”.`);
   }
 }
 
@@ -110,10 +115,19 @@ async function browserSignIn(
   provider: OpenAICodexProvider,
   output: vscode.OutputChannel,
   profile = DEFAULT_OAUTH_PROFILE,
+  direct?: boolean,
 ): Promise<void> {
   let attempt: Awaited<ReturnType<OpenAIOAuth["startBrowserSignIn"]>> | undefined;
   try {
-    attempt = await oauth.startBrowserSignIn(profile);
+    if (direct === undefined) {
+      const mode = await vscode.window.showQuickPick([
+        { label: "Continue with ChatGPT", description: "Plan usage with per-app limits", direct: true },
+        { label: "Codex browser (legacy)", description: "Existing Codex connection", direct: false },
+      ], { title: `Connect ChatGPT profile “${profile}”` });
+      if (!mode) return;
+      direct = mode.direct;
+    }
+    attempt = direct ? await oauth.startDirectBrowserSignIn(profile) : await oauth.startBrowserSignIn(profile);
     if (!await vscode.env.openExternal(vscode.Uri.parse(attempt.url))) throw new Error("VS Code could not open the OpenAI authorization page");
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Waiting for OpenAI sign-in…", cancellable: true },
@@ -124,6 +138,7 @@ async function browserSignIn(
     );
     provider.setActiveProfile(profile);
     provider.clearModelCache(profile);
+    provider.clearUsage(profile);
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-sign-in", profile);
     vscode.window.showInformationMessage(`Signed in to Codex Bridge profile “${profile}” with ChatGPT.`);
@@ -154,6 +169,7 @@ async function manualSignIn(
     await attempt.complete(callback);
     provider.setActiveProfile(profile);
     provider.clearModelCache(profile);
+    provider.clearUsage(profile);
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-sign-in", profile);
     vscode.window.showInformationMessage(`Signed in to Codex Bridge profile “${profile}” with ChatGPT.`);
@@ -179,6 +195,7 @@ async function importCodexSession(
     const session = await oauth.importCodexCliSession(profile);
     provider.setActiveProfile(profile);
     provider.clearModelCache(profile);
+    provider.clearUsage(profile);
     provider.fireDidChange();
     refreshUsageAfterAuth(provider, output, "post-import", profile);
     vscode.window.showInformationMessage(`Imported Codex CLI session${session.email ? ` for ${session.email}` : ""} into profile “${profile}”.`);
@@ -336,7 +353,7 @@ async function showUsage(
     ...formatUsageRows(snapshot).map(toUsageQuickPickItem),
     { label: "Actions", kind: vscode.QuickPickItemKind.Separator },
     { label: "$(refresh) Refresh usage", action: "refresh", alwaysShow: true },
-    { label: "$(link-external) Open ChatGPT Codex", action: "open", alwaysShow: true },
+    { label: "$(link-external) Manage ChatGPT app limits and usage", action: "open", alwaysShow: true },
   ], {
     title: snapshot.updatedAt ? `Codex usage [${profile}] — updated ${new Date(snapshot.updatedAt).toLocaleTimeString()}` : `Codex usage [${profile}]`,
     placeHolder: "Subscription quota and locally tracked inference tokens",
@@ -344,7 +361,7 @@ async function showUsage(
     matchOnDetail: true,
   });
   if (picked?.action === "refresh") await showUsage(provider, output, profile);
-  else if (picked?.action === "open") await vscode.env.openExternal(vscode.Uri.parse("https://chatgpt.com/codex"));
+  else if (picked?.action === "open") await vscode.env.openExternal(vscode.Uri.parse(CHATGPT_USAGE_SETTINGS_URL));
   else if (picked?.action === "redeemReset" && picked.resetCreditId) await redeemReset(provider, output, picked.resetCreditId, profile);
 }
 

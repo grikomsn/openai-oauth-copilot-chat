@@ -19,6 +19,7 @@ export interface ModelOptionSpec {
   fastDescription?: string;
   supportsReasoningSummaryParameter: boolean;
   defaultReasoningSummary: ReasoningSummary;
+  supportsImageGeneration?: boolean;
 }
 
 /** Options resolved from the picker and workspace fallback settings. */
@@ -47,7 +48,7 @@ export interface ModelRequestOptions {
 export function modelOptionSpec(
   model: Pick<
     CodexModelMetadata,
-    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "fastDescription" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary"
+    "reasoningLevels" | "defaultReasoningEffort" | "supportsFast" | "fastDescription" | "supportsReasoningSummaryParameter" | "defaultReasoningSummary" | "supportsImageGeneration"
   >,
 ): ModelOptionSpec {
   const efforts = model.reasoningLevels.map((level) => level.effort);
@@ -59,6 +60,7 @@ export function modelOptionSpec(
     fastDescription: model.fastDescription,
     supportsReasoningSummaryParameter: model.supportsReasoningSummaryParameter,
     defaultReasoningSummary: model.defaultReasoningSummary,
+    supportsImageGeneration: model.supportsImageGeneration,
   };
 }
 
@@ -178,7 +180,7 @@ export function resolveModelRequestOptions(
       ? spec.defaultReasoningSummary
       : requestedSummary,
     webSearch: requestedWebSearch ?? false,
-    imageGeneration: requestedImageGeneration ?? false,
+    imageGeneration: spec.supportsImageGeneration === false ? false : requestedImageGeneration ?? false,
     speedMode: speedMode === "fast"
       ? "fast"
       : spec.supportsFast && requestedSpeed === "fast" ? "fast" : "normal",
@@ -219,7 +221,7 @@ export function buildModelConfigurationSchema(
   return {
     type: "object",
     properties: {
-      reasoningEffort: {
+      ...(spec.efforts.length ? { reasoningEffort: {
         type: "string",
         title: "Reasoning Effort",
         enum: [...spec.efforts],
@@ -227,7 +229,7 @@ export function buildModelConfigurationSchema(
         enumDescriptions: spec.efforts.map((effort) => spec.descriptions[effort] ?? formatOptionLabel(effort)),
         default: defaultEffort,
         group: "navigation",
-      },
+      } } : {}),
       webSearch: {
         type: "boolean",
         title: "Web Search",
@@ -235,13 +237,13 @@ export function buildModelConfigurationSchema(
         default: defaults?.webSearch ?? false,
         group: "navigation",
       },
-      imageGeneration: {
+      ...(spec.supportsImageGeneration !== false ? { imageGeneration: {
         type: "boolean",
         title: "Image Generation",
         description: "Allow Codex to use OpenAI-hosted image generation for this model.",
         default: defaults?.imageGeneration ?? false,
         group: "navigation",
-      },
+      } } : {}),
       ...(spec.supportsFast ? {
         speedMode: {
           type: "string",
@@ -309,7 +311,7 @@ export function applyModelRequestOptions(
   return {
     ...body,
     reasoning: {
-      effort: options.reasoningEffort,
+      ...(options.reasoningEffort ? { effort: options.reasoningEffort } : {}),
       ...(supportsReasoningSummaryParameter && options.reasoningSummary !== "none"
         ? { summary: options.reasoningSummary }
         : {}),

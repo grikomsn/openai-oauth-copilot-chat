@@ -58,6 +58,7 @@ export interface AdditionalRateLimit {
 
 /** Complete usage state shown by the extension. */
 export interface CodexUsageSnapshot {
+  connectionKind?: "legacy-codex" | "chatgpt-direct";
   planType?: string;
   primary?: RateLimitWindow;
   secondary?: RateLimitWindow;

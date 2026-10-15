@@ -5,6 +5,8 @@ import * as vscode from "vscode";
 import type { OpenAIOAuth } from "../auth/auth";
 import { DEFAULT_OAUTH_PROFILE } from "../auth/auth";
 import { createPromptCacheTransportHeaders } from "../provider/prompt-cache";
+import { encodeRequestBody } from "./encoding";
+import { adaptDirectRequest } from "../provider/direct-request";
 import {
   CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL,
   CHATGPT_CODEX_RESET_CREDITS_URL,
@@ -12,9 +14,11 @@ import {
   CHATGPT_CODEX_USAGE_URL,
   OAUTH_ORIGINATOR,
   chatgptCodexModelsUrl,
+  CHATGPT_API_RESOURCE,
+  type ConnectionKind,
 } from "./protocol";
 
-export type OAuthCredentials = { token: string; accountId?: string };
+export type OAuthCredentials = { token: string; accountId?: string; kind?: ConnectionKind; connectionId?: string };
 
 export class CodexTransport {
   constructor(
@@ -23,37 +27,39 @@ export class CodexTransport {
     private readonly requestTimeoutSeconds: () => number,
     private readonly codexModelsClientVersion: () => string,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly requestCompression: () => boolean = () => true,
   ) {}
 
   sendModels(cancellation: vscode.CancellationToken, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
     const clientVersion = this.codexModelsClientVersion();
-    return this.withAuthRetry(profile, (credentials) => this.fetchWithCancellation(chatgptCodexModelsUrl(clientVersion), {
+    return this.withAuthRetry(profile, (credentials) => this.fetchWithCancellation(
+      credentials.kind === "chatgpt-direct" ? `${CHATGPT_API_RESOURCE}/models` : chatgptCodexModelsUrl(clientVersion), {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         Originator: OAUTH_ORIGINATOR,
-        Version: clientVersion,
+        ...(credentials.kind === "chatgpt-direct" ? {} : { Version: clientVersion }),
       },
     }, cancellation));
   }
 
   sendUsage(profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
-    return this.withAuthRetry(profile, (credentials) => this.fetcher(CHATGPT_CODEX_USAGE_URL, {
+    return this.withAuthRetry(profile, (credentials) => { this.requireLegacyUsage(credentials); return this.fetcher(CHATGPT_CODEX_USAGE_URL, {
       headers: this.authHeaders(credentials, "application/json"),
-    }));
+    }); });
   }
 
   sendResetCredits(profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
-    return this.withAuthRetry(profile, (credentials) => this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
+    return this.withAuthRetry(profile, (credentials) => { this.requireLegacyUsage(credentials); return this.fetcher(CHATGPT_CODEX_RESET_CREDITS_URL, {
       headers: {
         ...this.authHeaders(credentials, "application/json"),
         Originator: OAUTH_ORIGINATOR,
         "OpenAI-Beta": "codex-1",
       },
-    }));
+    }); });
   }
 
   sendResetCreditConsume(body: (accountId: string | undefined) => string, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
-    return this.withAuthRetry(profile, (credentials) => this.fetcher(CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL, {
+    return this.withAuthRetry(profile, (credentials) => { this.requireLegacyUsage(credentials); return this.fetcher(CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL, {
       method: "POST",
       headers: {
         ...this.authHeaders(credentials, "application/json"),
@@ -62,7 +68,7 @@ export class CodexTransport {
         "OpenAI-Beta": "codex-1",
       },
       body: body(credentials.accountId),
-    }));
+    }); });
   }
 
   sendResponse(body: Record<string, unknown>, cancellation: vscode.CancellationToken, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
@@ -71,27 +77,40 @@ export class CodexTransport {
       const transportHeaders = promptCacheKey
         ? createPromptCacheTransportHeaders(promptCacheKey)
         : { "session-id": randomUUID(), "thread-id": randomUUID() };
-      return this.fetchWithCancellation(CHATGPT_CODEX_RESPONSES_URL, {
+      const request = credentials.kind === "chatgpt-direct" ? adaptDirectRequest(body) : body;
+      const encoded = encodeRequestBody(JSON.stringify(request), this.requestCompression());
+      return this.fetchWithCancellation(credentials.kind === "chatgpt-direct" ? `${CHATGPT_API_RESOURCE}/responses` : CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
         headers: {
           ...this.authHeaders(credentials, "text/event-stream"),
           "Content-Type": "application/json",
           Originator: OAUTH_ORIGINATOR,
+          "X-Client-Request-ID": randomUUID(),
           ...transportHeaders,
+          ...encoded.headers,
         },
-        body: JSON.stringify(body),
+        body: encoded.body,
       }, cancellation, true);
     });
+  }
+
+  private requireLegacyUsage(credentials: OAuthCredentials): void {
+    if (credentials.kind === "chatgpt-direct") throw new Error("Manage ChatGPT plan usage and app limits in ChatGPT Settings → Usage.");
   }
 
   private async withAuthRetry(
     profile: string,
     request: (credentials: OAuthCredentials) => Promise<Response>,
   ): Promise<Response> {
-    let response = await request(await this.oauth.getAccessToken(false, profile));
+    const initial = await this.oauth.getAccessToken(false, profile);
+    let response = await request(initial);
     if (response.status === 401) {
       await response.body?.cancel();
-      response = await request(await this.oauth.getAccessToken(true, profile));
+      const refreshed = await this.oauth.getAccessToken(true, profile);
+      if (initial.kind !== refreshed.kind || initial.connectionId !== refreshed.connectionId) {
+        throw new Error("This profile's connection changed. Select the model again before retrying.");
+      }
+      response = await request(refreshed);
     }
     return response;
   }
@@ -101,7 +120,7 @@ export class CodexTransport {
       Authorization: `Bearer ${credentials.token}`,
       Accept: accept,
       "User-Agent": this.userAgent,
-      ...(credentials.accountId ? { "ChatGPT-Account-ID": credentials.accountId } : {}),
+      ...(credentials.accountId && credentials.kind !== "chatgpt-direct" ? { "ChatGPT-Account-ID": credentials.accountId } : {}),
     };
   }
 
@@ -124,6 +143,12 @@ export class CodexTransport {
           if (controller.signal.aborted) {
             await response.body?.cancel();
             controller.signal.throwIfAborted();
+          }
+          if (retryTransient && attempt < 2 && [502, 503, 504].includes(response.status)) {
+            const retrySeconds = Number(response.headers.get("retry-after"));
+            await response.body?.cancel();
+            await waitForRetry(Number.isFinite(retrySeconds) && retrySeconds > 0 ? Math.min(3000, retrySeconds * 1000) : 250 * 2 ** attempt, controller.signal);
+            continue;
           }
           if (!response.body) return response;
           const wrapped = wrapResponseBody(response, controller.signal, cleanup);

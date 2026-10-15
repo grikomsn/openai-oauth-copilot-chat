@@ -37,6 +37,9 @@ import {
 import { CodexTransport } from "./transport/client";
 import { codexModelsClientVersion } from "./transport/protocol";
 import { CatalogCache } from "./models/catalog-cache";
+import { parseDirectModelsPayload } from "./models/direct-catalog";
+import { DIRECT_TOOL_NAMESPACE } from "./provider/direct-request";
+import type { ConnectionKind } from "./transport/protocol";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
 import { modelPricingFields, openAIModelCost } from "./models/pricing";
 import { hasObservedProfile, observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
@@ -49,6 +52,7 @@ export interface CodexModel extends vscode.LanguageModelChatInformation {
   speedMode: SpeedMode;
   optionSpec: ModelOptionSpec;
   supportsParallelToolCalls: boolean;
+  connectionKind?: ConnectionKind;
 }
 
 /**
@@ -98,6 +102,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       () => configuration().get("requestTimeoutSeconds", 600),
       () => codexModelsClientVersion(configuration().get<string>("codexVersion")),
       fetcher,
+      () => configuration().get<string>("requestCompression", "auto") !== "none",
     );
     this.metadata = new ModelsDevMetadata(metadataCache, fetcher);
   }
@@ -165,6 +170,14 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   }
 
   async refreshUsage(profile = this.activeProfile): Promise<CodexUsageSnapshot> {
+    if (await this.oauth.connectionKind(profile) === "chatgpt-direct") {
+      const current = this.getUsageSnapshot(profile);
+      const next: CodexUsageSnapshot = { lastRequest: current.lastRequest, tracked: current.tracked,
+        connectionKind: "chatgpt-direct", updatedAt: Date.now() };
+      this.lastQuotaFetchAt.set(profile, next.updatedAt!);
+      this.setUsage(profile, next);
+      return next;
+    }
     try {
       const response = await this.transport.sendUsage(profile);
       if (!response.ok) throw await responseError("Unable to refresh OpenAI Codex usage", response);
@@ -247,6 +260,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       return [];
     }
     const models = expandCodexModelVariants(await this.fetchModels(token, profile));
+    const connectionKind = await this.oauth.connectionKind(profile);
     await observeProfile(this.metadataCache, profile, models.length);
     return models.map((model) => {
       const optionSpec = modelOptionSpec(model);
@@ -255,6 +269,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         id: profileQualifiedModelId(profile, model.registrationId),
         rawModelId: model.rawModelId,
         profile,
+        connectionKind,
         name: model.name,
         family: model.rawModelId,
         version: model.version,
@@ -263,7 +278,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
         maxInputTokens: model.input,
         maxOutputTokens: model.output,
         isUserSelectable: true,
-        ...(modelPricingFields(openAIModelCost(model.rawModelId, model.cost)) ?? {}),
+        ...(connectionKind === "chatgpt-direct" ? {} : modelPricingFields(openAIModelCost(model.rawModelId, model.cost)) ?? {}),
         isBYOK: true,
         requiresAuthorization: { label: `Codex Bridge (${profile})` },
         configurationSchema: buildModelConfigurationSchema(optionSpec, defaults, contextSizeOptions(model.input)),
@@ -282,6 +297,8 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     token: vscode.CancellationToken,
   ): Promise<void> {
+    const connectionKind = await this.oauth.connectionKind(model.profile);
+    if ((model.connectionKind ?? "legacy-codex") !== connectionKind) throw new Error("This profile's connection changed. Refresh models and select the model again.");
     const requestOptions = resolveRequestOptions(model.optionSpec, model.speedMode, options.modelConfiguration);
     const contextCap = resolveContextCap(requestOptions.contextSize, model.maxInputTokens);
     const body = buildRequest(
@@ -300,7 +317,8 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     if (configuration().get("debugLogging", false)) {
       this.output.appendLine(`[request] model=${model.rawModelId} speed=${requestOptions.speedMode} effort=${requestOptions.reasoningEffort} summary=${requestOptions.reasoningSummary} webSearch=${requestOptions.webSearch} imageGeneration=${requestOptions.imageGeneration}${contextCap !== undefined ? ` contextCap=${contextCap}` : ""} initiator=${options.requestInitiator ?? "unknown"}`);
     }
-    await consumeStream(response.body, progress, token, vscode, (usage) => this.captureRequestUsage(usage, model.rawModelId, model.profile));
+    await consumeStream(response.body, progress, token, vscode, (usage) => this.captureRequestUsage(usage, model.rawModelId, model.profile),
+      connectionKind === "chatgpt-direct" ? DIRECT_TOOL_NAMESPACE : undefined);
     if (Date.now() - (this.lastQuotaFetchAt.get(model.profile) ?? 0) > 60_000) {
       void this.refreshUsage(model.profile).catch((error) => this.output.appendLine(`[usage] refresh failed: ${messageOf(error)}`));
     }
@@ -344,7 +362,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
   private async fetchModels(cancellation: vscode.CancellationToken, profile: string): Promise<CodexModelMetadata[]> {
     const maxAge = Math.max(1, configuration().get("catalogCacheMinutes", 5)) * 60_000;
     const session = await this.oauth.sessionInfo(profile);
-    const account = session?.accountId ?? session?.email;
+    const account = session?.clientId ?? session?.accountId ?? session?.email;
     if (!account) throw new Error(`Sign in to OpenAI Codex profile “${profile}” first`);
     if (account !== this.modelCacheAccounts.get(profile)) this.clearModelCache(profile);
     const cache = this.modelCaches.get(profile) ?? new CatalogCache<CodexModelMetadata[]>();
@@ -352,7 +370,8 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     const models = await cache.getOrRefresh(maxAge, async () => {
       const response = await this.transport.sendModels(cancellation, profile);
       if (!response.ok) throw await responseError("Unable to load OpenAI Codex models", response);
-      const parsed = parseCodexModelsPayload(await response.json());
+      const payload: unknown = await response.json();
+      const parsed = session?.kind === "chatgpt-direct" ? parseDirectModelsPayload(payload) : parseCodexModelsPayload(payload);
       if (!parsed.length) throw new Error("OpenAI Codex returned no usable models");
       const metadata = await this.metadata.getOrRefresh();
       return parsed.map((model) => enrichCodexModel(model, metadata.models[model.id]));

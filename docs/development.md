@@ -16,6 +16,9 @@ The following implementations have focused colocated `node:test` coverage in `sr
 | Model catalog | [`catalog.ts`](../src/models/catalog.ts) | [`catalog.test.ts`](../src/models/catalog.test.ts) |
 | Model options | [`options.ts`](../src/models/options.ts) | [`options.test.ts`](../src/models/options.test.ts) |
 | OAuth | [`auth.ts`](../src/auth/auth.ts) | [`auth.test.ts`](../src/auth/auth.test.ts) |
+| ChatGPT plan auth | [`direct.ts`](../src/auth/direct.ts) | [`direct.test.ts`](../src/auth/direct.test.ts) |
+| Public API catalog | [`direct-catalog.ts`](../src/models/direct-catalog.ts) | [`direct-catalog.test.ts`](../src/models/direct-catalog.test.ts) |
+| Direct-plan tools/history | [`direct-request.ts`](../src/provider/direct-request.ts) | [`direct-request.test.ts`](../src/provider/direct-request.test.ts) |
 | Prompt cache | [`prompt-cache.ts`](../src/features/prompt-cache.ts) | [`prompt-cache.test.ts`](../src/features/prompt-cache.test.ts) |
 | Protocol identity | [`protocol.ts`](../src/transport/protocol.ts) | [`protocol.test.ts`](../src/transport/protocol.test.ts) |
 | Responses streaming | [`responses.ts`](../src/transport/responses.ts) | [`responses.test.ts`](../src/transport/responses.test.ts) |
@@ -26,7 +29,7 @@ The VS Code integration entry points remain [`extension.ts`](../src/extension.ts
 and [`provider.ts`](../src/provider.ts); their behavior is exercised through the
 Extension Development Host because both depend on the VS Code runtime.
 
-The ChatGPT Codex endpoint requires a bearer token plus the ChatGPT account ID extracted from OAuth JWT claims. Requests use `store: false` and send full conversation history. The provider derives a privacy-safe `prompt_cache_key` and matching cache-affinity `session-id` from the model, tools, instructions, and first user message, so both remain stable across normal chat turns, agent tool loops, and retries without storing prompt text locally. Each stateless backend request receives a fresh `thread-id`, preventing independent VS Code conversations with the same cache prefix from sharing a backend thread identity. The ChatGPT backend currently rejects the public Responses API's explicit `prompt_cache_options` and `prompt_cache_breakpoint` fields, so requests rely on the backend's automatic cache policy with the stable routing key.
+The legacy ChatGPT Codex endpoint requires a bearer token plus the ChatGPT account ID extracted from OAuth JWT claims. Direct-plan credentials instead route to the public API and do not use that account header or private usage/reset endpoints. Both modes use `store: false` and send full supplied history by default. The provider derives a privacy-safe `prompt_cache_key` and matching cache-affinity `session-id` from the model, tools, instructions, and first user message, so both remain stable across normal chat turns, agent tool loops, and retries without storing prompt text locally. Each stateless request receives a fresh `thread-id`. See [the manual test guide](chatgpt-plan-testing.md) for the new connection workflow.
 
 Shared protocol constants live in [`src/transport/protocol.ts`](../src/transport/protocol.ts). OAuth and inference requests must use the extension originator and user agent defined there; do not identify requests as the official Codex CLI or OpenAI VS Code extension. The OAuth client and ChatGPT backend are undocumented integration surfaces and may change without notice.
 

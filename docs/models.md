@@ -2,6 +2,10 @@
 
 ## Live model directory
 
+Direct ChatGPT plan connections use `https://api.openai.com/v1/models` with the selected profile's OAuth token. They preserve server ordering and expose visible, API-supported entries. Unadvertised reasoning, Fast service-tier, and image-generation controls are omitted. Account-provided Fast slugs stay separate entries. When output capacity is omitted, the extension reserves a conservative output budget within the advertised context window. Catalog caches remain isolated by profile and issued client registration.
+
+The remaining Codex-specific rules in this section apply to legacy connections.
+
 The extension discovers the catalog available to the signed-in Codex profile
 from the live ChatGPT backend model directory,
 `https://chatgpt.com/backend-api/codex/models?client_version=<version>`. The

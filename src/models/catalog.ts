@@ -39,6 +39,7 @@ export interface CodexModelMetadata {
   releaseDate?: string;
   lastUpdated?: string;
   cost?: ModelCost;
+  supportsImageGeneration?: boolean;
 }
 
 /** A picker-ready model entry, including its selected speed mode. */

@@ -10,6 +10,13 @@ export const OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 export const OPENAI_AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 export const OPENAI_TOKEN_URL = "https://auth.openai.com/oauth/token";
 export const OPENAI_REDIRECT_URI = "http://localhost:1455/auth/callback";
+export type ConnectionKind = "legacy-codex" | "chatgpt-direct";
+export const CHATGPT_ISSUER = "https://auth.openai.com";
+export const CHATGPT_AUTHORIZE_URL = `${CHATGPT_ISSUER}/api/accounts/authorize`;
+export const CHATGPT_TOKEN_URL = `${CHATGPT_ISSUER}/api/accounts/oauth/token`;
+export const CHATGPT_API_RESOURCE = "https://api.openai.com/v1";
+export const CHATGPT_DIRECT_SCOPE = "chatgpt.tokens.use.direct";
+export const CHATGPT_USAGE_SETTINGS_URL = "https://chatgpt.com/settings/usage";
 
 /**
  * Codex client version sent to the live model directory.

@@ -33,7 +33,9 @@ This native VS Code `LanguageModelChatProvider` handles OpenAI OAuth locally and
 2. Open **Chat: Manage Language Models**, select **Add Models → Codex Bridge**, and follow the prompts (group name and profile ID). Codex Bridge then offers to sign in with ChatGPT right away — or run **Codex Bridge: Add Provider Entry** (or **Add ChatGPT Account**) yourself; each creates the entry if missing and signs in only when needed. Use manual sign-in if local port `1455` is unavailable.
 3. Repeat those steps with another profile ID to keep work and personal ChatGPT accounts available side by side.
 
-The authenticated Codex catalog remains authoritative. Composer controls override workspace defaults; reasoning defaults to Low when supported, while hosted Web Search and Image Generation remain off until enabled. Click the Codex status-bar item to inspect five-hour and weekly quota, reset timing, and tokens observed by this extension.
+Choose **Continue with ChatGPT** when connecting an account to register a Codex Bridge app connection with your ChatGPT plan. Manage its weekly percentage cap in [ChatGPT Settings → Usage](https://chatgpt.com/settings/usage). Existing connections and the **Codex browser (legacy)** option keep their Codex backend route.
+
+Each connection discovers its available models from its authenticated catalog. Composer controls override workspace defaults; reasoning defaults to Low when advertised. Direct ChatGPT connections support Copilot tools and optional Web Search, while Image Generation remains available only on the legacy route. Click the Codex status-bar item for locally observed tokens and a link to app limits; legacy connections also show account quota and reset credits.
 
 ## Documentation
 

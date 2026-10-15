@@ -1,8 +1,10 @@
 /** Responses streaming primitives used by the VS Code provider. */
 
 import { randomUUID } from "node:crypto";
+import { providerRequestError, type ProviderRequestError } from "../errors";
 
 interface FunctionCall {
+  namespace?: string;
   id?: string;
   name?: string;
   arguments?: string;
@@ -17,12 +19,13 @@ export interface CodexStreamEvent {
   reasoning?: string;
   reasoningBoundary?: true;
   encryptedReasoning?: { id: string; data: string };
-  toolCall?: { id: string; name: string; arguments: string };
+  toolCall?: { id: string; name: string; arguments: string; namespace?: string };
   webSearchCall?: { id: string; status?: string; action?: Record<string, unknown> };
   webSearchAnnotation?: Record<string, unknown>;
   imageGenerationCall?: { id: string; status?: string; result?: string };
   usage?: Record<string, unknown>;
   error?: string;
+  failure?: ProviderRequestError;
 }
 
 /**
@@ -87,6 +90,7 @@ export class ResponsesStreamParser {
       call.fragments.push(...other.fragments);
       call.id ??= other.id;
       call.name ??= other.name;
+      call.namespace ??= other.namespace;
       call.arguments ??= other.arguments;
       call.emitted ||= other.emitted;
       call.finished ||= other.finished;
@@ -95,6 +99,7 @@ export class ResponsesStreamParser {
     for (const alias of aliases) this.calls.set(alias, call);
     call.id = stringField(item, "call_id") ?? call.id;
     call.name = stringField(item, "name") ?? call.name;
+    call.namespace = stringField(item, "namespace") ?? call.namespace;
     return call;
   }
 
@@ -108,7 +113,7 @@ export class ResponsesStreamParser {
       return final ? [{ error: "Codex returned an incomplete or invalid function call" }] : [];
     }
     call.emitted = true;
-    return [{ toolCall: { id: call.id!, name: call.name!, arguments: args } }];
+    return [{ toolCall: { id: call.id!, name: call.name!, arguments: args, ...(call.namespace ? { namespace: call.namespace } : {}) } }];
   }
 
   private outputItem(value: Record<string, unknown>, item: Record<string, unknown>, final = false): CodexStreamEvent[] {
@@ -144,6 +149,7 @@ export class ResponsesStreamParser {
     let value: Record<string, unknown>;
     try {
       value = JSON.parse(data) as Record<string, unknown>;
+      if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
     } catch {
       return undefined;
     }
@@ -205,8 +211,7 @@ export class ResponsesStreamParser {
     }
     if (type === "response.incomplete") return [{ error: "Codex response is incomplete" }];
     if (type === "error" || type === "response.failed") {
-      const error = recordField(value, "error") ?? recordField(recordField(value, "response") ?? {}, "error");
-      return [{ error: stringField(error ?? {}, "message") ?? "Codex stream failed" }];
+      return [{ failure: providerRequestError(value) }];
     }
     return undefined;
   }

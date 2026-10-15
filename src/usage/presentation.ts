@@ -23,6 +23,7 @@ export function formatUsageStatusBar(snapshot: CodexUsageSnapshot): string {
 
 export function formatUsageTooltip(snapshot: CodexUsageSnapshot, now = Date.now()): string {
   const lines = [`Codex Bridge usage${snapshot.planType ? ` (${snapshot.planType})` : ""}`];
+  if (snapshot.connectionKind === "chatgpt-direct") lines.push("App limits and shared plan usage: ChatGPT Settings → Usage");
   if (snapshot.primary) lines.push(windowSummary(snapshot.primary, now));
   if (snapshot.secondary) lines.push(windowSummary(snapshot.secondary, now));
   if (snapshot.resetCredits?.availableCount) lines.push(`Reset credits: ${snapshot.resetCredits.availableCount}`);
@@ -38,6 +39,7 @@ export function formatUsageTooltip(snapshot: CodexUsageSnapshot, now = Date.now(
 
 export function formatUsageRows(snapshot: CodexUsageSnapshot, now = Date.now()): UsageDisplayRow[] {
   const rows: UsageDisplayRow[] = [];
+  if (snapshot.connectionKind === "chatgpt-direct") rows.push({ kind: "empty", label: "ChatGPT app limits", description: "Manage weekly percentage caps in ChatGPT Settings → Usage", detail: "Token totals below are local observations, not remaining plan quota." });
   if (snapshot.primary) rows.push(windowRow(snapshot.primary, now));
   if (snapshot.secondary) rows.push(windowRow(snapshot.secondary, now));
   for (const limit of snapshot.additional ?? []) if (limit.primary) rows.push({ ...windowRow(limit.primary, now), label: limit.name });

@@ -3,6 +3,24 @@ import test from "node:test";
 import type * as vscode from "vscode";
 import { CodexTransport } from "./client";
 
+test("isolates direct-plan models, inference, and account-only usage endpoints", async () => {
+  const calls: string[] = [];
+  const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) } as vscode.CancellationToken;
+  const transport = new CodexTransport({ getAccessToken: async () => ({ token: "synthetic", kind: "chatgpt-direct", accountId: "legacy-id-must-not-be-sent" }) } as never,
+    "test-agent", () => 10, () => "1.0.0", async (input, init) => {
+      calls.push(String(input));
+      assert.equal(new Headers(init?.headers).has("ChatGPT-Account-ID"), false);
+      if (init?.body) assert.equal(JSON.parse(String(init.body)).max_output_tokens, undefined);
+      return new Response(null);
+    }, () => false);
+  await transport.sendModels(token);
+  await transport.sendResponse({ model: "test", max_output_tokens: 42 }, token);
+  await assert.rejects(transport.sendUsage(), /Settings/);
+  await assert.rejects(transport.sendResetCredits(), /Settings/);
+  await assert.rejects(transport.sendResetCreditConsume(() => "{}"), /Settings/);
+  assert.deepEqual(calls, ["https://api.openai.com/v1/models", "https://api.openai.com/v1/responses"]);
+});
+
 test("routes each response through the profile embedded in the selected model", async () => {
   const requestedProfiles: string[] = [];
   const oauth = {
@@ -40,6 +58,28 @@ test("routes each response through the profile embedded in the selected model", 
     { authorization: "Bearer personal-token", accountId: "personal-account" },
     { authorization: "Bearer work-token", accountId: "work-account" },
   ]);
+});
+
+test("does not switch connection routes during a forced 401 refresh", async () => {
+  let refresh = false;
+  let calls = 0;
+  const transport = new CodexTransport({ getAccessToken: async () => {
+    const kind = refresh ? "chatgpt-direct" : "legacy-codex";
+    refresh = true;
+    return { token: "synthetic", kind };
+  } } as never, "test", () => 10, () => "1", async () => { calls += 1; return new Response(null, { status: 401 }); });
+  const cancellation = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) } as vscode.CancellationToken;
+  await assert.rejects(transport.sendResponse({}, cancellation), /connection changed/);
+  assert.equal(calls, 1);
+});
+
+test("bounds temporary HTTP retries and never retries a quota rejection", async () => {
+  let calls = 0;
+  const cancellation = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) } as vscode.CancellationToken;
+  const transport = new CodexTransport({ getAccessToken: async () => ({ token: "synthetic" }) } as never,
+    "test", () => 10, () => "1", async () => new Response(null, { status: ++calls < 3 ? 503 : 429 }));
+  assert.equal((await transport.sendResponse({}, cancellation)).status, 429);
+  assert.equal(calls, 3);
 });
 
 test("retries transient response fetch failures without refreshing OAuth", async () => {

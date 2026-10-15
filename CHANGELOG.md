@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+### Minor Changes
+
+- d0c0b04: Add ChatGPT plan connections with named app registrations and per-app limits managed in ChatGPT settings. Preserve legacy connections while adding validated OAuth identity, account-specific public API models, namespaced Copilot tools, safe quota errors, rotating-session refresh coordination, and optional request compression.
+
 ## 1.1.1
 
 ### Patch Changes

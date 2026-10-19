@@ -4,6 +4,8 @@
 .codex/**
 docs/**
 assets/cover.jpg
+test/**
+tmp/**
 .env*
 .gitignore
 CODE_OF_CONDUCT.md
@@ -12,12 +14,11 @@ SECURITY.md
 AGENTS.md
 src/**
 scripts/**
-tsconfig.json
-package-lock.json
 out/**/*.test.*
 out/*.test.*
 **/*.map
 **/.DS_Store
+tsconfig.json
+package-lock.json
 *.vsix
 .DS_Store
-test/**

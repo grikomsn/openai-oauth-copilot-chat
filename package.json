@@ -206,7 +206,7 @@
     "check": "npm test",
     "changeset": "changeset",
     "update-codex-version": "node scripts/update-codex-version.mjs",
-    "version": "changeset version",
+    "version": "changeset version && npm install --package-lock-only --ignore-scripts",
     "release": "npm run check && vsce publish --skip-duplicate",
     "refresh-models": "node scripts/refresh-models.mjs",
     "prepackage": "npm run check",

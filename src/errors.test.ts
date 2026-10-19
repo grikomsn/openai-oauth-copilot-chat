@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { providerRequestError, ProviderRequestError, responseError } from "./errors";
+import { messageOf, providerRequestError, ProviderRequestError, responseError } from "./errors";
 import { ResponsesStreamParser } from "./transport/responses";
 
 test("preserves cap errors from HTTP and after stream output without echoing private bodies", async () => {
@@ -23,4 +23,9 @@ test("distinguishes temporary unavailability and removes unstructured admission 
   assert.equal(providerRequestError({ error: { code: "subscription_sharing_user_not_eligible" } }).retryable, false);
   const error = await responseError("Request failed", Response.json({ detail: "synthetic sensitive detail" }, { status: 403 }));
   assert.equal(error.message, "Request failed (403)");
+});
+
+test("messageOf maps AbortError to a friendly message", () => {
+  const abort = new DOMException("The operation was aborted.", "AbortError");
+  assert.equal(messageOf(abort), "Request cancelled or timed out");
 });

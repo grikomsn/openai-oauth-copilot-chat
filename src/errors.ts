@@ -14,7 +14,9 @@ export function messageOf(error: unknown): string {
   return String(error);
 }
 
-const SHARING_MESSAGES: Readonly<Record<string, string>> = {
+const PROVIDER_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  context_length_exceeded: "Context window exceeded. Run /compact in Copilot Chat, reduce attachments or tool output, or start a new chat.",
+  context_window_exceeded: "Context window exceeded. Run /compact in Copilot Chat, reduce attachments or tool output, or start a new chat.",
   subscription_sharing_usage_limit_exceeded: "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for shared plan and app limits.",
   subscription_sharing_user_not_eligible: "ChatGPT plan usage is unavailable for this account or workspace.",
   subscription_sharing_unsupported_capability: "This feature is not supported by ChatGPT plan usage. Check the model and enabled tools.",
@@ -41,10 +43,10 @@ export class ProviderRequestError extends Error {
 export function providerRequestError(raw: unknown, prefix = "Codex stream failed", status?: number, requestId?: string): ProviderRequestError {
   const root = record(raw);
   const error = record(root?.error) ?? record(record(root?.response)?.error) ?? (root?.type === "error" ? root : undefined);
-  const code = typeof error?.code === "string" && Object.hasOwn(SHARING_MESSAGES, error.code) ? error.code : undefined;
+  const code = typeof error?.code === "string" && Object.hasOwn(PROVIDER_ERROR_MESSAGES, error.code) ? error.code : undefined;
   const param = typeof error?.param === "string" && /^[a-zA-Z_][a-zA-Z0-9_.\[\]]{0,79}$/.test(error.param) ? error.param : undefined;
   const id = requestId && /^req_[a-zA-Z0-9_-]{1,100}$/.test(requestId) ? requestId : undefined;
-  const detail = code ? SHARING_MESSAGES[code] : "";
+  const detail = code ? PROVIDER_ERROR_MESSAGES[code] : "";
   return new ProviderRequestError(`${prefix}${status ? ` (${status})` : ""}${detail ? `: ${detail}` : ""}`, code, status, id, param);
 }
 

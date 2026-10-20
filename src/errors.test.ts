@@ -29,3 +29,20 @@ test("messageOf maps AbortError to a friendly message", () => {
   const abort = new DOMException("The operation was aborted.", "AbortError");
   assert.equal(messageOf(abort), "Request cancelled or timed out");
 });
+
+test("preserves safe context-overflow codes from HTTP and stream errors", async () => {
+  for (const code of ["context_length_exceeded", "context_window_exceeded"]) {
+    const error = { code, message: "synthetic private prompt content" };
+    const http = await responseError("Request failed", Response.json({ error }, { status: 400 }));
+    assert.ok(http instanceof ProviderRequestError);
+    assert.equal(http.code, code);
+    assert.equal(http.retryable, false);
+    assert.match(http.message, /\/compact/);
+    assert.doesNotMatch(http.message, /synthetic private/);
+    const parser = new ResponsesStreamParser();
+    const events = parser.push("data: " + JSON.stringify({ type: "response.failed", response: { error } }) + "\n\n");
+    assert.equal(events[0].failure?.code, code);
+    assert.match(events[0].failure?.message ?? "", /\/compact/);
+    assert.doesNotMatch(events[0].failure?.message ?? "", /synthetic private/);
+  }
+});

@@ -1,7 +1,8 @@
 /** VS Code language-model adapter for the ChatGPT Codex backend. */
 
-import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
+import { randomUUID } from "node:crypto";
+import { estimateChatTokens } from "./provider/token-count";
 import { messageOf, responseError } from "./errors";
 import {
   applyModelRequestOptions,
@@ -22,7 +23,6 @@ import {
 } from "./models/catalog";
 import { DEFAULT_OAUTH_PROFILE, normalizeProfileId, OpenAIOAuth } from "./auth/auth";
 import { AutoSignInGate } from "./auth/auto-signin";
-import { partText } from "./provider/messages";
 import { buildRequest } from "./provider/request";
 import { consumeStream } from "./provider/response";
 import {
@@ -329,8 +329,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     value: string | vscode.LanguageModelChatRequestMessage,
     _token: vscode.CancellationToken,
   ): Promise<number> {
-    const text = typeof value === "string" ? value : value.content.map(partText).join("\n");
-    return Math.max(1, Math.ceil(text.length / 4));
+    return estimateChatTokens(value);
   }
 
   async testConnection(profile = this.activeProfile): Promise<{ model: string; text: string; speedMode: string; reasoningEffort: string; reasoningSummary: string }> {

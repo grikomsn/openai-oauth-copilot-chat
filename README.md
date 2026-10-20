@@ -37,6 +37,8 @@ Choose **Continue with ChatGPT** when connecting an account to register a Codex 
 
 Each connection discovers its available models from its authenticated catalog. Composer controls override workspace defaults; reasoning defaults to Low when advertised. Direct ChatGPT connections support Copilot tools and optional Web Search, while Image Generation remains available only on the legacy route. Click the Codex status-bar item for locally observed tokens and a link to app limits; legacy connections also show account quota and reset credits.
 
+Context token counts are estimates. Tool-result text, tool arguments, thinking, and image inputs are included in context budgeting. If the service rejects a full context window, run `/compact` in Copilot Chat, reduce attachments or tool output, or start a new chat.
+
 ## Documentation
 
 - [Setup, commands, settings, and troubleshooting](https://github.com/grikomsn/openai-oauth-copilot-chat/blob/main/docs/setup.md)

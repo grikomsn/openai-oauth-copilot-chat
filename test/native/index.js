@@ -60,7 +60,12 @@ async function run() {
     if (String(url).includes("/models?")) return Response.json({ models: [{ slug: "native-probe", display_name: "Native probe", visibility: "list",
       context_window: 10000, input_modalities: ["text"], priority: 1, description: "Synthetic model", supports_parallel_tool_calls: true, supports_reasoning_summary_parameter: true, default_reasoning_summary: "auto", service_tiers: [], additional_speed_tiers: [], default_reasoning_level: "low", supported_reasoning_levels: [{ effort: "low", description: "low" }] }] });
     if (String(url).includes("models.dev")) return Response.json({});
-    const body = JSON.parse(init.body);
+    if (String(url).includes("wham/usage")) return Response.json({});
+    if (String(url).includes("rate-limit-reset-credits")) return Response.status(404).json({});
+    const rawBody = new Headers(init.headers).get("Content-Encoding") === "zstd"
+      ? require("node:zlib").zstdDecompressSync(init.body).toString("utf8")
+      : init.body;
+    const body = JSON.parse(rawBody);
     requests.push({ token: new Headers(init.headers).get("Authorization"), body });
     return new Response(sse([{ type: "response.output_text.delta", delta: "synthetic answer" }, { type: "response.completed" }]));
   };

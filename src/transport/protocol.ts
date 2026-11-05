@@ -30,7 +30,7 @@ export const CHATGPT_USAGE_SETTINGS_URL = "https://chatgpt.com/settings/usage";
  *
  * @see {@link chatgptCodexModelsUrl}
  */
-export const CODEX_MODELS_CLIENT_VERSION = "0.160.0";
+export const CODEX_MODELS_CLIENT_VERSION = "0.166.0";
 export const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 export const CHATGPT_CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 export const CHATGPT_CODEX_RESET_CREDITS_URL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";

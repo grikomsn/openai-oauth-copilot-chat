@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3
+
+### Patch Changes
+
+- f3edd23: Bump the pinned Codex client version to 0.166.0 for model discovery requests.
+
 ## 1.2.2
 
 ### Patch Changes

@@ -57,12 +57,17 @@ export class ResponseReporter {
   private thinkingOpen = false;
   /** Usage payloads held back while a thinking segment is open, flushed on close. */
   private pendingUsage: Record<string, unknown>[] = [];
+  /** Stable segment id: renderer-side re-id/timing stamping only hits falsy ids. */
+  private readonly segmentId: string;
+  static nextReporterId = 0;
 
   constructor(
     private readonly progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     private readonly parts: ResponseParts,
     private readonly toolNamespace?: string,
-  ) {}
+  ) {
+    this.segmentId = `codex-thinking-${ResponseReporter.nextReporterId++}`;
+  }
 
   closeThinking(): void {
     this.flushThinking();
@@ -71,7 +76,7 @@ export class ResponseReporter {
   private flushThinking(): void {
     if (!this.thinkingOpen) return;
     this.thinkingOpen = false;
-    this.progress.report(new this.parts.LanguageModelThinkingPart("", "", { vscode_reasoning_done: true }));
+    this.progress.report(new this.parts.LanguageModelThinkingPart("", this.segmentId, { vscode_reasoning_done: true }));
     for (const usage of this.pendingUsage.splice(0)) this.reportUsage(usage);
   }
 
@@ -85,7 +90,7 @@ export class ResponseReporter {
     if (event.error) throw new Error(event.error);
     if (event.reasoning) {
       this.thinkingOpen = true;
-      this.progress.report(new this.parts.LanguageModelThinkingPart(event.reasoning));
+      this.progress.report(new this.parts.LanguageModelThinkingPart(event.reasoning, this.segmentId));
     }
     if (event.reasoningBoundary || event.text || event.toolCall || event.imageGenerationCall || event.webSearchCall) this.flushThinking();
     if (event.text) this.progress.report(new this.parts.LanguageModelTextPart(event.text));

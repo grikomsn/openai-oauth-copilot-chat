@@ -19,8 +19,9 @@ test("closes thinking before text and tools, once per segment", () => {
   reporter.report({ reasoning: "more" });
   reporter.report({ toolCall: { id: "c", name: "read", arguments: "{}" } });
   reporter.closeThinking();
-  assert.deepEqual(output, [new Thinking("plan"), new Thinking("", "", { vscode_reasoning_done: true }), new Text("answer"),
-    new Thinking("more"), new Thinking("", "", { vscode_reasoning_done: true }), new Tool("c", "read", {})]);
+  assert.deepEqual(output, [new Thinking("plan", "codex-thinking-0"),
+    new Thinking("", "codex-thinking-0", { vscode_reasoning_done: true }), new Text("answer"),
+    new Thinking("more", "codex-thinking-0"), new Thinking("", "codex-thinking-0", { vscode_reasoning_done: true }), new Tool("c", "read", {})]);
 });
 
 test("usage events during thinking wait for the segment close so deltas stay mergeable", () => {
@@ -38,6 +39,7 @@ test("usage events during thinking wait for the segment close so deltas stay mer
   assert.deepEqual(output.map((part) => (part as object).constructor.name),
     ["Thinking", "Thinking", "Thinking", "Thinking", "Data", "Text"]);
   assert.deepEqual(output.slice(0, 3).map((part) => (part as Thinking).value), ["Son", "ar still flags a", " regex"]);
+  assert.equal((output[3] as Thinking).id, "codex-thinking-1");
   assert.deepEqual((output[3] as Thinking).metadata, { vscode_reasoning_done: true });
   const data = output.filter((part): part is Data => part instanceof Data);
   assert.equal(JSON.parse(new TextDecoder().decode(data[0].data)).completion_tokens, 4);
@@ -63,7 +65,9 @@ for (const terminal of ["", 'data: {"type":"response.incomplete"}\n\n', 'data: {
     }, cancel() { cancelled = true; } });
     const output: unknown[] = [];
     await assert.rejects(consumeStream(body, { report: (part) => output.push(part) }, cancellation, parts), /ended before|incomplete|failed/);
-    assert.deepEqual(output.at(-1), new Thinking("", "", { vscode_reasoning_done: true }));
+    const last = output.at(-1) as Thinking;
+    assert.deepEqual(last.metadata, { vscode_reasoning_done: true });
+    assert.match(String(last.id), /^codex-thinking-\d+$/);
     assert.equal(body.locked, false);
     if (terminal) assert.equal(cancelled, true);
   });

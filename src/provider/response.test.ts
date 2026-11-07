@@ -6,7 +6,9 @@ import { consumeStream, ResponseReporter, type ResponseParts } from "./response"
 class Text { constructor(readonly value: unknown) {} }
 class Thinking { constructor(readonly value: unknown, readonly id?: string, readonly metadata?: object) {} }
 class Tool { constructor(readonly id: string, readonly name: string, readonly input: object) {} }
-const parts = { LanguageModelTextPart: Text, LanguageModelThinkingPart: Thinking, LanguageModelToolCallPart: Tool } as unknown as ResponseParts;
+class Data { constructor(readonly data: Uint8Array, readonly mimeType: string) {} }
+const parts = { LanguageModelTextPart: Text, LanguageModelThinkingPart: Thinking, LanguageModelToolCallPart: Tool,
+  LanguageModelDataPart: Data } as unknown as ResponseParts;
 const cancellation = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) } as vscode.CancellationToken;
 
 test("closes thinking before text and tools, once per segment", () => {
@@ -19,6 +21,26 @@ test("closes thinking before text and tools, once per segment", () => {
   reporter.closeThinking();
   assert.deepEqual(output, [new Thinking("plan"), new Thinking("", "", { vscode_reasoning_done: true }), new Text("answer"),
     new Thinking("more"), new Thinking("", "", { vscode_reasoning_done: true }), new Tool("c", "read", {})]);
+});
+
+test("usage events during thinking wait for the segment close so deltas stay mergeable", () => {
+  const output: unknown[] = [];
+  const reporter = new ResponseReporter({ report: (part) => output.push(part) }, parts);
+  reporter.report({ reasoning: "Son" });
+  reporter.report({ usage: { prompt_tokens: 10, completion_tokens: 4 } });
+  reporter.report({ reasoning: "ar still flags a" });
+  reporter.report({ reasoning: " regex" });
+  reporter.report({ text: "answer" });
+  reporter.closeThinking();
+  // Copilot Chat merges a thinking delta only when the previous part is a
+  // non-empty thinking part; interleaved usage data parts would split the
+  // reasoning into one bubble per delta.
+  assert.deepEqual(output.map((part) => (part as object).constructor.name),
+    ["Thinking", "Thinking", "Thinking", "Thinking", "Data", "Text"]);
+  assert.deepEqual(output.slice(0, 3).map((part) => (part as Thinking).value), ["Son", "ar still flags a", " regex"]);
+  assert.deepEqual((output[3] as Thinking).metadata, { vscode_reasoning_done: true });
+  const data = output.filter((part): part is Data => part instanceof Data);
+  assert.equal(JSON.parse(new TextDecoder().decode(data[0].data)).completion_tokens, 4);
 });
 
 test("flushes the unterminated final event before completion validation and releases the reader", async () => {

@@ -215,12 +215,12 @@
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.19.2",
     "@types/vscode": "^1.125.0",
-    "@vscode/vsce": "^3.9.2",
+    "@vscode/vsce": "^4.1.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "jose": "^6.2.12"
+    "jose": "^6.2.15"
   }
 }

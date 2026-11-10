@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Dev dependencies only (the extension ships no runtime dependencies). One
+  # grouped PR a week keeps churn low; CI's tests and VSIX packaging gate each bump.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Let a release age before proposing it; hijacked versions are usually
+    # caught and yanked within days.
+    cooldown:
+      default-days: 7
+    groups:
+      dev-dependencies:
+        patterns: ["*"]
+    ignore:
+      # @types/vscode must not be newer than engines.vscode, or vsce refuses to
+      # package; raise both together in a deliberate PR.
+      - dependency-name: "@types/vscode"
+      # Node type majors get a deliberate upgrade PR, not a weekly bump.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # Compiler majors get a deliberate upgrade PR, not a weekly bump.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

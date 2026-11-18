@@ -3,6 +3,7 @@
 import type * as vscode from "vscode";
 import { decodeGeneratedImage } from "../features/image-generation";
 import { ResponsesStreamParser, type CodexStreamEvent } from "../transport/responses";
+import { ResponseWriter } from "../kit/response-writer";
 import { toProviderUsagePayload } from "../usage/domain";
 
 export interface ResponseParts {
@@ -54,84 +55,56 @@ export async function consumeStream(
 
 /** One reporter per response keeps each reasoning segment separate from visible output. */
 export class ResponseReporter {
-  private thinkingOpen = false;
-  /** Usage payloads held back while a thinking segment is open, flushed on close. */
-  private pendingUsage: Record<string, unknown>[] = [];
-  /** Stable segment id: renderer-side re-id/timing stamping only hits falsy ids. */
-  private readonly segmentId: string;
+  private readonly writer: ResponseWriter;
   static nextReporterId = 0;
 
   constructor(
-    private readonly progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
+    progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
     private readonly parts: ResponseParts,
     private readonly toolNamespace?: string,
   ) {
-    this.segmentId = `codex-thinking-${ResponseReporter.nextReporterId++}`;
+    this.writer = new ResponseWriter(progress, parts, "codex", String(ResponseReporter.nextReporterId++));
   }
 
   closeThinking(): void {
-    this.flushThinking();
-  }
-
-  private flushThinking(): void {
-    if (!this.thinkingOpen) return;
-    this.thinkingOpen = false;
-    this.progress.report(new this.parts.LanguageModelThinkingPart("", this.segmentId, { vscode_reasoning_done: true }));
-    for (const usage of this.pendingUsage.splice(0)) this.reportUsage(usage);
-  }
-
-  private reportUsage(usage: Record<string, unknown>): void {
-    const payload = toProviderUsagePayload(usage);
-    if (payload) this.progress.report(new this.parts.LanguageModelDataPart(new TextEncoder().encode(JSON.stringify(payload)), "usage"));
+    this.writer.closeThinking();
   }
 
   report(event: CodexStreamEvent): void {
     if (event.failure) throw event.failure;
     if (event.error) throw new Error(event.error);
-    if (event.reasoning) {
-      this.thinkingOpen = true;
-      this.progress.report(new this.parts.LanguageModelThinkingPart(event.reasoning, this.segmentId));
-    }
-    if (event.reasoningBoundary || event.text || event.toolCall || event.imageGenerationCall || event.webSearchCall) this.flushThinking();
-    if (event.text) this.progress.report(new this.parts.LanguageModelTextPart(event.text));
+    if (event.reasoning) this.writer.thinking(event.reasoning);
+    if (event.reasoningBoundary || event.text || event.toolCall || event.imageGenerationCall || event.webSearchCall) this.writer.closeThinking();
+    if (event.text) this.writer.text(event.text);
     if (event.encryptedReasoning) {
-      this.progress.report(new this.parts.LanguageModelThinkingPart([], event.encryptedReasoning.id, {
+      // Opaque reasoning rides along without opening or closing a visible segment.
+      this.writer.report(new this.parts.LanguageModelThinkingPart([], event.encryptedReasoning.id, {
         encrypted_content: event.encryptedReasoning.data,
         redactedData: event.encryptedReasoning.data,
-      }));
+      }), { closesThinking: false });
     }
     if (event.toolCall) {
       if (this.toolNamespace && event.toolCall.namespace && event.toolCall.namespace !== this.toolNamespace) throw new Error("ChatGPT returned a tool from an unknown namespace.");
-      this.progress.report(new this.parts.LanguageModelToolCallPart(event.toolCall.id, event.toolCall.name, parseArguments(event.toolCall.arguments)));
+      this.writer.toolCall(event.toolCall.id, event.toolCall.name, parseArguments(event.toolCall.arguments));
     }
-    if (event.webSearchCall) reportDataPart(this.progress, this.parts, "web-search", event.webSearchCall);
-    if (event.webSearchAnnotation) reportDataPart(this.progress, this.parts, "web-search-annotation", event.webSearchAnnotation);
+    if (event.webSearchCall) this.writer.report(dataPart(this.parts, "web-search", event.webSearchCall));
+    if (event.webSearchAnnotation) this.writer.report(dataPart(this.parts, "web-search-annotation", event.webSearchAnnotation), { closesThinking: false });
     if (event.imageGenerationCall) {
       if (event.imageGenerationCall.status === "failed") throw new Error("Codex image generation failed");
       if (event.imageGenerationCall.result) {
         const image = decodeGeneratedImage(event.imageGenerationCall.result);
-        this.progress.report(this.parts.LanguageModelDataPart.image(image.data, image.mimeType));
+        this.writer.report(this.parts.LanguageModelDataPart.image(image.data, image.mimeType));
       }
     }
-    if (event.usage) {
-      // Copilot Chat only merges reasoning deltas while the previous reported
-      // part is also thinking; hold usage data parts until the segment closes.
-      if (this.thinkingOpen) this.pendingUsage.push(event.usage);
-      else this.reportUsage(event.usage);
-    }
+    if (event.usage) this.writer.usage(toProviderUsagePayload(event.usage));
   }
 }
 
-function reportDataPart(
-  progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
-  parts: ResponseParts,
-  kind: string,
-  value: Record<string, unknown>,
-): void {
-  progress.report(new parts.LanguageModelDataPart(
+function dataPart(parts: ResponseParts, kind: string, value: Record<string, unknown>): vscode.LanguageModelDataPart {
+  return new parts.LanguageModelDataPart(
     new TextEncoder().encode(JSON.stringify({ kind, ...value })),
     "application/vnd.openai.web-search+json",
-  ));
+  );
 }
 
 function parseArguments(value: string): object {

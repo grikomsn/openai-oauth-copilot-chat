@@ -1,0 +1,3 @@
+[submodule "src/kit"]
+	path = src/kit
+	url = https://github.com/grikomsn/copilot-chat-kit.git

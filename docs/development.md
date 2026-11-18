@@ -55,6 +55,20 @@ Install a local build with:
 code --install-extension openai-oauth-copilot-chat-<version>.vsix --force
 ```
 
+## Shared kit
+
+`src/kit/` is the [copilot-chat-kit](https://github.com/grikomsn/copilot-chat-kit)
+git submodule shared by every Copilot Chat provider extension. It compiles and
+tests with this repository (`npm test` runs its colocated tests too), so a fresh
+clone needs `git clone --recurse-submodules` or `git submodule update --init`.
+
+- Change shared behavior in the kit repository, push it, then run
+  `git submodule update --remote src/kit` here and commit the bump.
+- Keep provider quirks (auth, dialect extensions, cost tables, usage domains)
+  in this repository; configure kit modules through their options instead of
+  editing them in place.
+- Dependabot proposes kit bumps weekly; CI checks out submodules.
+
 ## Release workflow
 
 User-visible pull requests normally include a Changeset:

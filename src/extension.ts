@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { messageOf } from "./errors";
+import { messageOf } from "./kit/errors";
 import { OpenAIOAuth } from "./auth/auth";
 import { registerCodexCommands } from "./commands/commands";
 import { OpenAICodexProvider } from "./provider";

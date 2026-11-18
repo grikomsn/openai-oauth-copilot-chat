@@ -2,19 +2,12 @@
 
 import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
-import { estimateChatTokens } from "./provider/token-count";
-import { messageOf, responseError } from "./errors";
-import {
-  applyModelRequestOptions,
-  buildModelConfigurationSchema,
-  contextSizeOptions,
-  modelOptionSpec,
-  resolveContextCap,
-  resolveModelRequestOptions,
-  type ModelOptionSpec,
-  type ModelRequestOptions,
-  type SpeedMode,
-} from "./models/options";
+import { ephemeralSnapshotStore } from "./kit/remote-snapshot";
+import { estimateChatTokens } from "./kit/token-count";
+import { responseError } from "./errors";
+import { messageOf } from "./kit/errors";
+import { applyModelRequestOptions, buildModelConfigurationSchema, modelOptionSpec, resolveModelRequestOptions, type ModelOptionSpec, type ModelRequestOptions, type SpeedMode } from "./models/options";
+import { contextSizeOptions, resolveContextCap } from "./kit/context-size";
 import {
   enrichCodexModel,
   expandCodexModelVariants,
@@ -41,7 +34,8 @@ import { parseDirectModelsPayload } from "./models/direct-catalog";
 import { DIRECT_TOOL_NAMESPACE } from "./provider/direct-request";
 import type { ConnectionKind } from "./transport/protocol";
 import { ModelsDevMetadata, type MetadataCache } from "./models/metadata";
-import { modelPricingFields, openAIModelCost } from "./models/pricing";
+import { openAIModelCost } from "./models/pricing";
+import { modelPricingFields } from "./kit/pricing";
 import { hasObservedProfile, observeProfile, readProfileJournal, reconcileProfiles } from "./provider-journal";
 import { activeProfileFromState, profileFromConfiguration, profileQualifiedModelId } from "./provider-profile";
 
@@ -90,7 +84,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
     private readonly output: vscode.OutputChannel,
     userAgent: string,
     initialUsage: Readonly<Record<string, CodexUsageSnapshot>> = {},
-    private readonly metadataCache: MetadataCache = memoryMetadataCache(),
+    private readonly metadataCache: MetadataCache = ephemeralSnapshotStore(),
     fetcher: typeof fetch = fetch,
     initialActiveProfile: unknown = DEFAULT_OAUTH_PROFILE,
   ) {
@@ -103,6 +97,7 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
       () => codexModelsClientVersion(configuration().get<string>("codexVersion")),
       fetcher,
       () => configuration().get<string>("requestCompression", "auto") !== "none",
+      () => configuration().get("streamIdleTimeoutSeconds", 120),
     );
     this.metadata = new ModelsDevMetadata(metadataCache, fetcher);
   }
@@ -395,13 +390,6 @@ export class OpenAICodexProvider implements vscode.LanguageModelChatProvider<Cod
 
 }
 
-function memoryMetadataCache(): MetadataCache {
-  const values = new Map<string, unknown>();
-  return {
-    get<T>(key: string): T | undefined { return values.get(key) as T | undefined; },
-    async update(key: string, value: unknown): Promise<void> { values.set(key, value); },
-  };
-}
 
 function configuration(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration("openaiCodex");

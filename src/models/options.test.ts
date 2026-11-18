@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  applyModelRequestOptions,
-  buildModelConfigurationSchema,
-  contextSizeOptions,
-  modelOptionSpec,
-  resolveContextCap,
-  resolveModelRequestOptions,
-  type ModelOptionSpec,
-} from "./options";
+import { applyModelRequestOptions, buildModelConfigurationSchema, modelOptionSpec, resolveModelRequestOptions, type ModelOptionSpec } from "./options";
+import { contextSizeOptions, resolveContextCap } from "../kit/context-size";
 
 const spec: ModelOptionSpec = {
   efforts: ["medium", "adaptive"],

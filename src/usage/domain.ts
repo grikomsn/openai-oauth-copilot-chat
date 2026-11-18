@@ -1,3 +1,5 @@
+import { providerUsagePayload, type ProviderUsagePayload } from "../kit/usage-payload";
+
 /** Usage payload normalization, local tracking, and persistence. */
 
 /** Token counts reported by one Codex inference request. */
@@ -74,14 +76,6 @@ export interface CodexUsageSnapshot {
 }
 
 /** Compact token payload sent to VS Code's language-model provider API. */
-export interface ProviderUsagePayload {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
-  completion_tokens_details?: { reasoning_tokens: number };
-}
-
 /**
  * Converts Responses API token usage into the compact payload VS Code consumes.
  * Cache read and write counts remain nested under prompt token details.
@@ -99,20 +93,7 @@ export interface ProviderUsagePayload {
  * @see {@link ProviderUsagePayload}
  */
 export function toProviderUsagePayload(raw: Record<string, unknown>): ProviderUsagePayload | undefined {
-  const usage = normalizeTokenUsage(raw);
-  if (usage.promptTokens === undefined && usage.completionTokens === undefined && usage.totalTokens === undefined) return undefined;
-  // Match the nested Responses API shape while omitting empty detail objects.
-  const promptTokenDetails = compactObject({
-    cached_tokens: usage.cachedTokens,
-    cache_write_tokens: usage.cacheWriteTokens,
-  });
-  return compactObject({
-    prompt_tokens: usage.promptTokens,
-    completion_tokens: usage.completionTokens,
-    total_tokens: usage.totalTokens,
-    prompt_tokens_details: Object.keys(promptTokenDetails).length ? promptTokenDetails : undefined,
-    completion_tokens_details: usage.reasoningTokens === undefined ? undefined : { reasoning_tokens: usage.reasoningTokens },
-  });
+  return providerUsagePayload(normalizeTokenUsage(raw));
 }
 
 /**

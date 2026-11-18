@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { messageOf, providerRequestError, ProviderRequestError, responseError } from "./errors";
+import { messageOf } from "./kit/errors";
+import { providerRequestError, ProviderRequestError, responseError } from "./errors";
 import { ResponsesStreamParser } from "./transport/responses";
 
 test("preserves cap errors from HTTP and after stream output without echoing private bodies", async () => {

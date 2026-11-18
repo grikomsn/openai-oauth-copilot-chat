@@ -6,6 +6,9 @@ import type { OpenAIOAuth } from "../auth/auth";
 import { DEFAULT_OAUTH_PROFILE } from "../auth/auth";
 import { createPromptCacheTransportHeaders } from "../provider/prompt-cache";
 import { encodeRequestBody } from "./encoding";
+import { fetchWithRetry, gatewayStatuses } from "../kit/retry";
+import { RequestDeadline } from "../kit/stream";
+import { stringifyWellFormedJson } from "../kit/unicode";
 import { adaptDirectRequest } from "../provider/direct-request";
 import {
   CHATGPT_CODEX_RESET_CREDIT_CONSUME_URL,
@@ -28,6 +31,7 @@ export class CodexTransport {
     private readonly codexModelsClientVersion: () => string,
     private readonly fetcher: typeof fetch = fetch,
     private readonly requestCompression: () => boolean = () => true,
+    private readonly streamIdleTimeoutSeconds: () => number = () => 120,
   ) {}
 
   sendModels(cancellation: vscode.CancellationToken, profile = DEFAULT_OAUTH_PROFILE): Promise<Response> {
@@ -78,7 +82,7 @@ export class CodexTransport {
         ? createPromptCacheTransportHeaders(promptCacheKey)
         : { "session-id": randomUUID(), "thread-id": randomUUID() };
       const request = credentials.kind === "chatgpt-direct" ? adaptDirectRequest(body) : body;
-      const encoded = encodeRequestBody(JSON.stringify(request), this.requestCompression());
+      const encoded = encodeRequestBody(stringifyWellFormedJson(request), this.requestCompression());
       return this.fetchWithCancellation(credentials.kind === "chatgpt-direct" ? `${CHATGPT_API_RESOURCE}/responses` : CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
         headers: {
@@ -130,50 +134,36 @@ export class CodexTransport {
     cancellation: vscode.CancellationToken,
     retryTransient = false,
   ): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(new Error("Codex request timed out")), Math.max(10, this.requestTimeoutSeconds()) * 1000);
-    const listener = cancellation.onCancellationRequested(() => controller.abort());
-    if (cancellation.isCancellationRequested) controller.abort();
+    // Inference streams also get an idle deadline; short JSON requests only the total one.
+    const deadline = new RequestDeadline({
+      label: "Codex request",
+      totalMs: Math.max(10, this.requestTimeoutSeconds()) * 1000,
+      ...(retryTransient ? { idleMs: Math.max(10, this.streamIdleTimeoutSeconds()) * 1000 } : {}),
+      cancellation,
+    });
     let handedOff = false;
-    const cleanup = (): void => { clearTimeout(timeout); listener.dispose(); };
     try {
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          const response = await this.fetcher(url, { ...init, signal: controller.signal });
-          if (controller.signal.aborted) {
-            await response.body?.cancel();
-            controller.signal.throwIfAborted();
-          }
-          if (retryTransient && attempt < 2 && [502, 503, 504].includes(response.status)) {
-            const retrySeconds = Number(response.headers.get("retry-after"));
-            await response.body?.cancel();
-            await waitForRetry(Number.isFinite(retrySeconds) && retrySeconds > 0 ? Math.min(3000, retrySeconds * 1000) : 250 * 2 ** attempt, controller.signal);
-            continue;
-          }
-          if (!response.body) return response;
-          const wrapped = wrapResponseBody(response, controller.signal, cleanup);
-          handedOff = true;
-          return wrapped;
-        } catch (error) {
-          if (!retryTransient || attempt >= 2 || controller.signal.aborted || !isTransientNetworkError(error)) throw error;
-          await waitForRetry(250 * 2 ** attempt, controller.signal);
+      const response = await fetchWithRetry(async () => {
+        const response = await this.fetcher(url, { ...init, signal: deadline.signal });
+        if (deadline.signal.aborted) {
+          await response.body?.cancel();
+          deadline.signal.throwIfAborted();
         }
-      }
+        return response;
+      }, { isTransientStatus: gatewayStatuses, maxRetries: retryTransient ? 2 : 0, signal: deadline.signal });
+      if (!response.body) return response;
+      const wrapped = wrapResponseBody(response, deadline);
+      handedOff = true;
+      return wrapped;
     } finally {
-      if (!handedOff) cleanup();
+      if (!handedOff) deadline.dispose();
     }
   }
 }
 
-function isTransientNetworkError(error: unknown): boolean {
-  if (!(error instanceof Error) || error.name === "AbortError") return false;
-  const cause = (error as Error & { cause?: unknown }).cause;
-  const detail = `${error.name}: ${error.message} ${cause instanceof Error ? `${cause.name}: ${cause.message}` : ""}`;
-  return /fetch failed|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET|socket hang up/i.test(detail);
-}
-
-/** Keep the cancellation subscription and total deadline alive until body disposal. */
-function wrapResponseBody(response: Response, signal: AbortSignal, cleanup: () => void): Response {
+/** Keep the cancellation subscription and deadlines alive until body disposal; each chunk resets the idle timer. */
+function wrapResponseBody(response: Response, deadline: RequestDeadline): Response {
+  const signal = deadline.signal;
   const reader = response.body!.getReader();
   let disposed = false;
   let abort: () => void;
@@ -181,7 +171,7 @@ function wrapResponseBody(response: Response, signal: AbortSignal, cleanup: () =
     if (disposed) return;
     disposed = true;
     signal.removeEventListener("abort", abort);
-    cleanup();
+    deadline.dispose();
   };
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -202,7 +192,10 @@ function wrapResponseBody(response: Response, signal: AbortSignal, cleanup: () =
           controller.close();
           dispose();
           reader.releaseLock();
-        } else controller.enqueue(result.value);
+        } else {
+          deadline.touch();
+          controller.enqueue(result.value);
+        }
       } catch (error) {
         if (!disposed) {
           controller.error(error);
@@ -217,16 +210,4 @@ function wrapResponseBody(response: Response, signal: AbortSignal, cleanup: () =
     },
   });
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
-}
-
-function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const abort = (): void => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-    };
-    const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, delay);
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
-  });
 }

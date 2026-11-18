@@ -39,7 +39,9 @@ jobs:
           version: npm run version
           commit: 'chore: version extension'
           title: 'chore: version extension'
-          commitMode: github-api
+          # git-cli: the github-api mode diffs the tree with isomorphic-git, which
+          # misreads the src/kit submodule gitlink and requests an invalid deletion.
+          commitMode: git-cli
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

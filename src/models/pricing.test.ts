@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { costCategory, modelPricingFields, openAIModelCost } from "./pricing";
+import { openAIModelCost } from "./pricing";
+import { costCategory, modelPricingFields } from "../kit/pricing";
 
 test("converts USD per-million rates to VS Code pricing fields", () => {
   assert.deepEqual(modelPricingFields({ input: 2, cacheRead: 0.2, output: 12 }), {
-    pricing: "In: $2 · Out: $12 /1M tokens",
+    pricing: "In: $2 · Cached: $0.2 · Out: $12 /1M tokens",
     inputCost: 200,
     outputCost: 1200,
     cacheCost: 20,

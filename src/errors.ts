@@ -1,19 +1,5 @@
 /** Shared error formatting for extension-facing and network failures. */
 
-/**
- * Returns a useful message for any thrown value.
- *
- * @param error The value caught by the caller.
- * @returns The error message, or a string representation of the value.
- */
-export function messageOf(error: unknown): string {
-  if (error instanceof Error) {
-    if (error.name === "AbortError") return "Request cancelled or timed out";
-    return error.message;
-  }
-  return String(error);
-}
-
 const PROVIDER_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   context_length_exceeded: "Context window exceeded. Run /compact in Copilot Chat, reduce attachments or tool output, or start a new chat.",
   context_window_exceeded: "Context window exceeded. Run /compact in Copilot Chat, reduce attachments or tool output, or start a new chat.",

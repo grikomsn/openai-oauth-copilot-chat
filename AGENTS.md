@@ -5,10 +5,12 @@
 - These instructions apply to the entire repository.
 - This is a TypeScript VS Code extension. Use Node.js 22+ and npm; `package-lock.json` is authoritative.
 - Install from a clean checkout with `npm ci`.
+- `src/kit/` is the shared copilot-chat-kit git submodule. Clone with `--recurse-submodules` (or run `git submodule update --init`). Never edit kit files only here: commit and push the change to the kit repository (inside `src/kit` or in its own checkout), then commit the submodule bump with `git submodule update --remote src/kit`.
 
 ## Code map
 
 - `src/extension.ts`: activation and dependency wiring.
+- `src/kit/`: shared [copilot-chat-kit](https://github.com/grikomsn/copilot-chat-kit) git submodule (Unicode-safe JSON, errors, retry, request deadlines, SSE and Chat Completions parsing, message conversion, history trimming, response writing, usage payloads, pricing, context tiers, credentials, models.dev snapshots, inline-suggestion shell, VS Code API augmentations). Provider quirks stay outside it and configure it through options.
 - `src/commands/`: commands, account UI, diagnostics, and usage workflows.
 - `src/auth/auth.ts`: PKCE sign-in, refresh, callback handling, and secret persistence.
 - `src/provider.ts`: VS Code chat-provider integration and Responses API translation.

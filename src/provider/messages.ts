@@ -1,6 +1,7 @@
 /** Conversion between VS Code chat history and Responses API input items. */
 
 import * as vscode from "vscode";
+import { joinTextParts, stringifyWellFormedJson } from "../kit/unicode";
 
 export type InputItem = Record<string, unknown>;
 
@@ -20,9 +21,9 @@ export function convertMessage(message: vscode.LanguageModelChatRequestMessage):
     } else if (part instanceof vscode.LanguageModelDataPart && part.mimeType.startsWith("image/")) {
       content.push({ type: "input_image", detail: "auto", image_url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString("base64")}` });
     } else if (part instanceof vscode.LanguageModelToolCallPart) {
-      extra.push({ type: "function_call", call_id: part.callId, name: part.name, arguments: JSON.stringify(part.input ?? {}) });
+      extra.push({ type: "function_call", call_id: part.callId, name: part.name, arguments: stringifyWellFormedJson(part.input ?? {}) });
     } else if (part instanceof vscode.LanguageModelToolResultPart) {
-      extra.push({ type: "function_call_output", call_id: part.callId, output: part.content.map(partText).join("\n") });
+      extra.push({ type: "function_call_output", call_id: part.callId, output: joinTextParts(part.content.map(partText)) });
     } else if (part instanceof vscode.LanguageModelThinkingPart) {
       const encrypted = part.metadata?.encrypted_content ?? part.metadata?.redactedData;
       if (typeof encrypted === "string") extra.push({ type: "reasoning", summary: [], encrypted_content: encrypted });
@@ -34,7 +35,7 @@ export function convertMessage(message: vscode.LanguageModelChatRequestMessage):
 
 export function partText(part: vscode.LanguageModelInputPart | unknown): string {
   if (part instanceof vscode.LanguageModelTextPart) return part.value;
-  if (part instanceof vscode.LanguageModelToolCallPart) return JSON.stringify(part.input ?? {});
-  if (part instanceof vscode.LanguageModelToolResultPart) return part.content.map(partText).join("\n");
+  if (part instanceof vscode.LanguageModelToolCallPart) return stringifyWellFormedJson(part.input ?? {});
+  if (part instanceof vscode.LanguageModelToolResultPart) return joinTextParts(part.content.map(partText));
   return typeof part === "string" ? part : "";
 }

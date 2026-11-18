@@ -148,6 +148,12 @@
           "minimum": 10,
           "description": "Maximum duration of a Codex request in seconds."
         },
+        "openaiCodex.streamIdleTimeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 10,
+          "description": "Abort a streaming ChatGPT response when no data arrives for this many seconds."
+        },
         "openaiCodex.catalogCacheMinutes": {
           "type": "number",
           "default": 5,

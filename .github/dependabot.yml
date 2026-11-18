@@ -33,3 +33,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  # The shared copilot-chat-kit submodule at src/kit; each bump runs the full
+  # test suite, including the kit's own colocated tests.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly

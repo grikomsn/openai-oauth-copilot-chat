@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 import { DEFAULT_OAUTH_PROFILE, normalizeProfileId, type AuthorizationFlow, OpenAIOAuth } from "../auth/auth";
-import { messageOf } from "../errors";
+import { messageOf } from "../kit/errors";
 import { OpenAICodexProvider } from "../provider";
 import { CHATGPT_USAGE_SETTINGS_URL, EXTENSION_DISPLAY_NAME } from "../transport/protocol";
 import { formatUsageRows, type UsageDisplayRow } from "../usage/presentation";

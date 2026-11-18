@@ -160,3 +160,15 @@ test("the total timeout still aborts a stalled body after headers", async (t) =>
   await assert.rejects(reading, /timed out/);
   assert.equal(source.disposed(), true);
 });
+
+test("a silent stream times out on the idle deadline before the total one", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const source = tokenSource();
+  const transport = new CodexTransport({ getAccessToken: async () => ({ token: "synthetic" }) } as never, "test", () => 600, () => "1",
+    async () => new Response(new ReadableStream()), () => true, () => 30);
+  const response = await transport.sendResponse({}, source.token);
+  const reading = response.text();
+  t.mock.timers.tick(30_000);
+  await assert.rejects(reading, /Codex request timed out: no data received for 30 seconds/);
+  assert.equal(source.disposed(), true);
+});

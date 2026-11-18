@@ -22,3 +22,4 @@ tsconfig.json
 package-lock.json
 *.vsix
 .DS_Store
+.gitmodules

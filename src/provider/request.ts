@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 import { applyModelRequestOptions, type ModelRequestOptions } from "../models/options";
-import { trimHistoryToFitContext } from "./history-trim";
+import { trimResponsesInputToFit } from "../kit/history-trim";
 import { buildPromptCacheRequestFields } from "./prompt-cache";
 import { buildClientTools } from "../tools/client-tools";
 import { buildHostedTools } from "../tools/hosted-tools";
@@ -22,7 +22,7 @@ export function buildRequest(
   const allTools = [...buildHostedTools(requestOptions), ...buildClientTools(options.tools)];
   let convertedInput = convertMessages(messages);
   if (contextCapTokens !== undefined) {
-    convertedInput = [...trimHistoryToFitContext(convertedInput, contextCapTokens).items];
+    convertedInput = [...trimResponsesInputToFit(convertedInput, contextCapTokens).items];
   }
   const input = convertedInput.length
     ? convertedInput
